@@ -36,9 +36,14 @@ function teacherOnboardingPage(): Plugin {
 }
 
 export default defineConfig({
+  base: process.env.GITHUB_ACTIONS ? '/teacher/' : '/',
   plugins: [vue(), teacherOnboardingPage()],
   build: {
     rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name]-v233-[hash].js',
+        assetFileNames: 'assets/[name]-v233-[hash][extname]'
+      },
       input: {
         index: resolve(__dirname, 'index.html'),
         teacherManagement: resolve(__dirname, 'teacher-management/index.html')
