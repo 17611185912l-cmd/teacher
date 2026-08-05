@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, type Component } from 'vue'
 import { Aim, Bell, Calendar, CircleClose, Collection, EditPen, Expand, Flag, Grid, Loading, Menu, Monitor, Notebook, Plus, Reading, Refresh, Search, Setting, SwitchButton, Timer, TrendCharts, Trophy, UploadFilled, View } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type UploadFile } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type UploadFile } from 'element-plus'
 
 type Status = '休假中' | '授课中' | '未授课'
 type AuditStatus = '待审核' | '审核通过' | '已驳回'
-interface Teacher { id:string; name:string; initials:string; level:string; type:string; phone:string; wechat:string; subjects:string[]; grades:string[]; tags:string[]; hours:number; rating:number; status:Status; online:boolean; auditStatus:AuditStatus; date:string; city:string; school:string; education:string; experience:number; intro:string }
+interface Teacher { id:string; name:string; initials:string; level:string; type:string; phone:string; wechat:string; subjects:string[]; grades:string[]; tags:string[]; hours:number; rating:number; status:Status; online:boolean; auditStatus:AuditStatus; date:string; city:string; school:string; education:string; experience:number; intro:string; originalPortraitUrl?:string; aiPortraitUrl?:string }
 interface Query { name:string; wechat:string; phone:string; level:string; subject:string; auditStatus:string; range:string[] }
 interface SharedTeacherApplication { id:string; name:string; phone:string; teacherType:string; experienceRange?:string; experience?:number; school:string; education:string; grades:string[]; subjects:string[]; intro:string; submittedAt:string }
 interface IntroTemplate { id:string; title:string; content:string; enabled:boolean; updatedAt:string }
@@ -13,11 +13,9 @@ type BuiltInFocusIcon = 'monitor' | 'trend' | 'flag' | 'setting' | 'reading' | '
 interface TeachingFocusItem { id:string; icon:string; title:string; subtitle:string }
 interface TeachingAchievementItem { id:string; icon:string; title:string; subtitle:string; highlight:string; enabled:boolean }
 interface TeacherTag { id:string; name:string; enabled:boolean; source:string; sort:number; updatedAt:string }
-interface TeacherTagQuery { name:string; status:'' | 'enabled' | 'disabled'; creator:string }
 interface TeacherTagDraft { id:string; name:string; enabled:boolean; sort:number }
-interface TeacherTypeItem { id:string; parentType:string; teacherType:string; description:string; sort:number; enabled:boolean }
-interface TeacherTypeQuery { parentType:string; status:'' | 'enabled' | 'disabled' }
-interface TeacherTypeDraft { id:string; parentType:string; teacherType:string; description:string; sort:number; enabled:boolean }
+interface TeacherTypeItem { id:string; name:string; sort:number; enabled:boolean }
+interface TeacherTypeDraft { id:string; name:string; sort:number; enabled:boolean }
 interface ContentTemplateSettings { intros:IntroTemplate[]; focusItems:TeachingFocusItem[]; achievements:TeachingAchievementItem[] }
 interface StoredContentTemplateSettings extends Partial<ContentTemplateSettings> { focusTags?:string[] }
 function cloneTeacher(teacher: Teacher): Teacher { return { ...teacher, subjects: [...teacher.subjects], grades: [...teacher.grades], tags: [...teacher.tags] } }
@@ -108,6 +106,15 @@ const teachingFocusOptions = ref<TeachingFocusItem[]>(initialContentTemplates.fo
 const teachingAchievements = ref<TeachingAchievementItem[]>(initialContentTemplates.achievements)
 const activeIntroTemplates = computed(() => introTemplates.value.filter(item => item.enabled))
 const teachingFocus = ref<string[]>(['中考提分', '数学思维提升'])
+const maxTeachingFocusCount = 3
+function isTeachingFocusOptionDisabled(title: string): boolean {
+  return teachingFocus.value.length >= maxTeachingFocusCount && !teachingFocus.value.includes(title)
+}
+function limitTeachingFocusSelection(): void {
+  if (teachingFocus.value.length <= maxTeachingFocusCount) return
+  teachingFocus.value = teachingFocus.value.slice(0, maxTeachingFocusCount)
+  ElMessage.warning('教学侧重最多选择 3 项')
+}
 const contentManagementTab = ref<'intros' | 'focus' | 'tags' | 'types' | 'achievements'>('types')
 const newTemplateRowId = '__new-intro-template__'
 const editingTemplateId = ref<string | null>(null)
@@ -155,31 +162,21 @@ function loadTeacherTags(): TeacherTag[] {
 }
 const teacherTags = ref<TeacherTag[]>(loadTeacherTags())
 const enabledTeacherTags = computed(() => teacherTags.value.filter(item => item.enabled).sort((a, b) => b.sort - a.sort))
-const teacherTagQuery = reactive<TeacherTagQuery>({ name:'', status:'', creator:'' })
-const teacherTagAppliedQuery = reactive<TeacherTagQuery>({ name:'', status:'', creator:'' })
 const teacherTagPage = ref(1)
 const teacherTagPageSize = ref(10)
-const teacherTagListLoading = ref(false)
-const teacherTagDialog = ref(false)
+const newTeacherTagRowId = '__new-teacher-tag__'
+const editingTeacherTagId = ref<string | null>(null)
 const teacherTagSaving = ref(false)
-const teacherTagFormRef = ref<FormInstance>()
 const teacherTagDraft = reactive<TeacherTagDraft>({ id:'', name:'', enabled:true, sort:100 })
-const teacherTagRules: FormRules = {
-  name: [
-    { required:true, message:'请输入标签名称', trigger:'blur' },
-    { min:2, max:20, message:'标签名称长度为 2 至 20 个字符', trigger:'blur' }
-  ],
-  sort: [{ required:true, message:'请输入排序值', trigger:'change' }]
-}
-const filteredTeacherTags = computed(() => teacherTags.value
-  .filter(item => !teacherTagAppliedQuery.name || item.name.includes(teacherTagAppliedQuery.name))
-  .filter(item => !teacherTagAppliedQuery.status || item.enabled === (teacherTagAppliedQuery.status === 'enabled'))
-  .filter(item => !teacherTagAppliedQuery.creator || item.source.includes(teacherTagAppliedQuery.creator))
+const filteredTeacherTags = computed(() => [...teacherTags.value]
   .sort((a, b) => b.sort - a.sort || b.updatedAt.localeCompare(a.updatedAt)))
 const teacherTagPageRows = computed(() => {
   const start = (teacherTagPage.value - 1) * teacherTagPageSize.value
   return filteredTeacherTags.value.slice(start, start + teacherTagPageSize.value)
 })
+const teacherTagTableRows = computed<TeacherTag[]>(() => editingTeacherTagId.value === newTeacherTagRowId
+  ? [...teacherTagPageRows.value, { id:newTeacherTagRowId, name:'', enabled:true, source:'超级主管/admin', sort:100, updatedAt:'-' }]
+  : teacherTagPageRows.value)
 function persistTeacherTags(): void { window.localStorage.setItem(teacherTagStorageKey, JSON.stringify(teacherTags.value)) }
 function teacherTagUsage(name: string): number { return rows.value.filter(teacher => teacher.tags.includes(name)).length }
 function teacherTagIndex(index: number): number { return (teacherTagPage.value - 1) * teacherTagPageSize.value + index + 1 }
@@ -188,28 +185,38 @@ function currentDateTime(): string {
   const pad = (value: number): string => String(value).padStart(2, '0')
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
 }
-async function searchTeacherTags(): Promise<void> {
-  teacherTagPage.value = 1
-  teacherTagListLoading.value = true
-  await new Promise<void>(resolve => window.setTimeout(resolve, 250))
-  Object.assign(teacherTagAppliedQuery, { name:teacherTagQuery.name.trim(), status:teacherTagQuery.status, creator:teacherTagQuery.creator.trim() })
-  teacherTagListLoading.value = false
+function ensureTeacherTagEditorAvailable(): boolean {
+  if (editingTeacherTagId.value) {
+    ElMessage.warning('请先保存或取消当前教师标签编辑')
+    return false
+  }
+  return true
 }
-function resetTeacherTagQuery(): void {
-  Object.assign(teacherTagQuery, { name:'', status:'', creator:'' })
-  Object.assign(teacherTagAppliedQuery, { name:'', status:'', creator:'' })
-  teacherTagPage.value = 1
+function startTeacherTagEdit(tag: TeacherTag): void {
+  if (!ensureTeacherTagEditorAvailable()) return
+  Object.assign(teacherTagDraft, { id:tag.id, name:tag.name, enabled:tag.enabled, sort:tag.sort })
+  editingTeacherTagId.value = tag.id
 }
-function openTeacherTagDialog(tag?: TeacherTag): void {
-  Object.assign(teacherTagDraft, tag ? { id:tag.id, name:tag.name, enabled:tag.enabled, sort:tag.sort } : { id:'', name:'', enabled:true, sort:100 })
-  teacherTagDialog.value = true
-  window.setTimeout(() => teacherTagFormRef.value?.clearValidate(), 0)
+function startNewTeacherTag(): void {
+  if (!ensureTeacherTagEditorAvailable()) return
+  Object.assign(teacherTagDraft, { id:'', name:'', enabled:true, sort:100 })
+  editingTeacherTagId.value = newTeacherTagRowId
+}
+function cancelTeacherTagEdit(): void {
+  editingTeacherTagId.value = null
+  Object.assign(teacherTagDraft, { id:'', name:'', enabled:true, sort:100 })
+}
+function teacherTagRowClassName({ row }: { row: TeacherTag }): string {
+  return editingTeacherTagId.value === row.id ? 'template-editing-row' : ''
 }
 async function saveTeacherTag(): Promise<void> {
-  if (!teacherTagFormRef.value) return
-  await teacherTagFormRef.value.validate()
+  if (teacherTagSaving.value) return
   const name = teacherTagDraft.name.trim()
+  if (!name) { ElMessage.warning('请输入标签名称'); return }
+  if (name.length < 2 || name.length > 20) { ElMessage.warning('标签名称长度为 2 至 20 个字符'); return }
+  if (!Number.isInteger(teacherTagDraft.sort) || teacherTagDraft.sort < 0 || teacherTagDraft.sort > 999) { ElMessage.warning('排序必须为 0 至 999 的整数'); return }
   if (teacherTags.value.some(item => item.name === name && item.id !== teacherTagDraft.id)) { ElMessage.warning('标签名称已存在'); return }
+  const editingExistingTag = Boolean(teacherTagDraft.id)
   teacherTagSaving.value = true
   await new Promise<void>(resolve => window.setTimeout(resolve, 350))
   const updatedAt = currentDateTime()
@@ -225,8 +232,8 @@ async function saveTeacherTag(): Promise<void> {
   }
   persistTeacherTags()
   teacherTagSaving.value = false
-  teacherTagDialog.value = false
-  ElMessage.success(teacherTagDraft.id ? '教师标签已更新' : '教师标签已新增')
+  cancelTeacherTagEdit()
+  ElMessage.success(editingExistingTag ? '教师标签已更新' : '教师标签已新增')
 }
 function updateTeacherTagStatus(tag: TeacherTag): void {
   persistTeacherTags()
@@ -247,12 +254,12 @@ async function deleteTeacherTag(tag: TeacherTag): Promise<void> {
 }
 const teacherTypeStorageKey = 'youzuobiao.teacher-types'
 const defaultTeacherTypes: TeacherTypeItem[] = [
-  { id:'type-good', parentType:'好老师', teacherType:'-', description:'平台重点推荐的优质教师类型', sort:100, enabled:true },
-  { id:'type-excellent', parentType:'优秀教师', teacherType:'-', description:'教学反馈与综合表现优秀', sort:90, enabled:true },
-  { id:'type-math', parentType:'数学专家', teacherType:'专家', description:'具备数学学科专项教学能力', sort:80, enabled:true },
-  { id:'type-english', parentType:'英语专家', teacherType:'-', description:'具备英语学科专项教学能力', sort:70, enabled:false },
-  { id:'type-core', parentType:'骨干教员', teacherType:'硕博', description:'平台骨干师资，教学经验稳定', sort:60, enabled:true },
-  { id:'type-professional', parentType:'专业教员', teacherType:'已认证', description:'已完成平台资质认证的专业教师', sort:50, enabled:true }
+  { id:'type-good', name:'好老师', sort:100, enabled:true },
+  { id:'type-excellent', name:'优秀教师', sort:90, enabled:true },
+  { id:'type-math', name:'数学专家', sort:80, enabled:true },
+  { id:'type-english', name:'英语专家', sort:70, enabled:false },
+  { id:'type-core', name:'骨干教员', sort:60, enabled:true },
+  { id:'type-professional', name:'专业教员', sort:50, enabled:true }
 ]
 function loadTeacherTypes(): TeacherTypeItem[] {
   const raw = window.localStorage.getItem(teacherTypeStorageKey)
@@ -260,99 +267,103 @@ function loadTeacherTypes(): TeacherTypeItem[] {
   try {
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) throw new Error('invalid teacher types')
-    const types = parsed.filter((item): item is TeacherTypeItem => Boolean(item && typeof item === 'object' && 'id' in item && 'parentType' in item && 'teacherType' in item && 'description' in item && 'sort' in item && 'enabled' in item))
-    return types.length ? types.map(item => ({ ...item })) : defaultTeacherTypes.map(item => ({ ...item }))
+    const types = parsed.flatMap((item): TeacherTypeItem[] => {
+      if (!item || typeof item !== 'object') return []
+      const candidate = item as Partial<TeacherTypeItem> & { parentType?: unknown }
+      const name = typeof candidate.name === 'string' ? candidate.name : typeof candidate.parentType === 'string' ? candidate.parentType : ''
+      if (!name || typeof candidate.id !== 'string' || typeof candidate.sort !== 'number' || typeof candidate.enabled !== 'boolean') return []
+      return [{ id:candidate.id, name, sort:candidate.sort, enabled:candidate.enabled }]
+    })
+    return types.length ? types : defaultTeacherTypes.map(item => ({ ...item }))
   } catch {
     return defaultTeacherTypes.map(item => ({ ...item }))
   }
 }
 const teacherTypes = ref<TeacherTypeItem[]>(loadTeacherTypes())
-const enabledTeacherTypes = computed(() => teacherTypes.value.filter(item => item.enabled).sort((a, b) => b.sort - a.sort))
-const teacherTypeQuery = reactive<TeacherTypeQuery>({ parentType:'', status:'' })
-const teacherTypeAppliedQuery = reactive<TeacherTypeQuery>({ parentType:'', status:'' })
+const enabledTeacherTypes = computed(() => teacherTypes.value
+  .filter(item => item.enabled)
+  .map(item => ({ ...item, parentType:item.name }))
+  .sort((a, b) => b.sort - a.sort))
 const teacherTypePage = ref(1)
 const teacherTypePageSize = ref(10)
-const teacherTypeListLoading = ref(false)
-const teacherTypeDialog = ref(false)
+const newTeacherTypeRowId = '__new-teacher-type__'
+const editingTeacherTypeId = ref<string | null>(null)
 const teacherTypeSaving = ref(false)
-const teacherTypeFormRef = ref<FormInstance>()
-const teacherTypeDraft = reactive<TeacherTypeDraft>({ id:'', parentType:'', teacherType:'', description:'', sort:100, enabled:true })
-const teacherTypeRules: FormRules = {
-  parentType: [
-    { required:true, message:'请输入父类型', trigger:'blur' },
-    { min:2, max:20, message:'父类型长度为 2 至 20 个字符', trigger:'blur' }
-  ],
-  sort: [{ required:true, message:'请输入排序值', trigger:'change' }],
-  enabled: [{ required:true, message:'请选择状态', trigger:'change' }]
-}
-const teacherTypeParentOptions = computed(() => Array.from(new Set(teacherTypes.value.map(item => item.parentType))))
-const filteredTeacherTypes = computed(() => teacherTypes.value
-  .filter(item => !teacherTypeAppliedQuery.parentType || item.parentType === teacherTypeAppliedQuery.parentType)
-  .filter(item => !teacherTypeAppliedQuery.status || item.enabled === (teacherTypeAppliedQuery.status === 'enabled'))
-  .sort((a, b) => b.sort - a.sort || a.parentType.localeCompare(b.parentType, 'zh-CN')))
+const teacherTypeDraft = reactive<TeacherTypeDraft>({ id:'', name:'', sort:100, enabled:true })
+const filteredTeacherTypes = computed(() => [...teacherTypes.value]
+  .sort((a, b) => b.sort - a.sort || a.name.localeCompare(b.name, 'zh-CN')))
 const teacherTypePageRows = computed(() => {
   const start = (teacherTypePage.value - 1) * teacherTypePageSize.value
   return filteredTeacherTypes.value.slice(start, start + teacherTypePageSize.value)
 })
+const teacherTypeTableRows = computed<TeacherTypeItem[]>(() => editingTeacherTypeId.value === newTeacherTypeRowId
+  ? [...teacherTypePageRows.value, { id:newTeacherTypeRowId, name:'', sort:100, enabled:true }]
+  : teacherTypePageRows.value)
 function persistTeacherTypes(): void { window.localStorage.setItem(teacherTypeStorageKey, JSON.stringify(teacherTypes.value)) }
 function teacherTypeIndex(index: number): number { return (teacherTypePage.value - 1) * teacherTypePageSize.value + index + 1 }
-async function searchTeacherTypes(): Promise<void> {
-  teacherTypePage.value = 1
-  teacherTypeListLoading.value = true
-  await new Promise<void>(resolve => window.setTimeout(resolve, 250))
-  Object.assign(teacherTypeAppliedQuery, teacherTypeQuery)
-  teacherTypeListLoading.value = false
+function ensureTeacherTypeEditorAvailable(): boolean {
+  if (editingTeacherTypeId.value) {
+    ElMessage.warning('请先保存或取消当前教师类型编辑')
+    return false
+  }
+  return true
 }
-function resetTeacherTypeQuery(): void {
-  Object.assign(teacherTypeQuery, { parentType:'', status:'' })
-  Object.assign(teacherTypeAppliedQuery, { parentType:'', status:'' })
-  teacherTypePage.value = 1
+function startTeacherTypeEdit(item: TeacherTypeItem): void {
+  if (!ensureTeacherTypeEditorAvailable()) return
+  Object.assign(teacherTypeDraft, { id:item.id, name:item.name, sort:item.sort, enabled:item.enabled })
+  editingTeacherTypeId.value = item.id
 }
-function openTeacherTypeDialog(item?: TeacherTypeItem): void {
-  Object.assign(teacherTypeDraft, item
-    ? { id:item.id, parentType:item.parentType, teacherType:item.teacherType === '-' ? '' : item.teacherType, description:item.description, sort:item.sort, enabled:item.enabled }
-    : { id:'', parentType:'', teacherType:'', description:'', sort:100, enabled:true })
-  teacherTypeDialog.value = true
-  window.setTimeout(() => teacherTypeFormRef.value?.clearValidate(), 0)
+function startNewTeacherType(): void {
+  if (!ensureTeacherTypeEditorAvailable()) return
+  Object.assign(teacherTypeDraft, { id:'', name:'', sort:100, enabled:true })
+  editingTeacherTypeId.value = newTeacherTypeRowId
+}
+function cancelTeacherTypeEdit(): void {
+  editingTeacherTypeId.value = null
+  Object.assign(teacherTypeDraft, { id:'', name:'', sort:100, enabled:true })
+}
+function teacherTypeRowClassName({ row }: { row: TeacherTypeItem }): string {
+  return editingTeacherTypeId.value === row.id ? 'template-editing-row' : ''
 }
 async function saveTeacherType(): Promise<void> {
-  if (!teacherTypeFormRef.value) return
-  const valid = await teacherTypeFormRef.value.validate().catch(() => false)
-  if (!valid) return
-  const parentType = teacherTypeDraft.parentType.trim()
-  const childType = teacherTypeDraft.teacherType.trim() || '-'
-  if (teacherTypes.value.some(item => item.parentType === parentType && item.teacherType === childType && item.id !== teacherTypeDraft.id)) {
-    ElMessage.warning('相同父类型与教师类型已存在')
+  if (teacherTypeSaving.value) return
+  const name = teacherTypeDraft.name.trim()
+  if (!name) { ElMessage.warning('请输入教师类型'); return }
+  if (name.length < 2 || name.length > 20) { ElMessage.warning('教师类型长度为 2 至 20 个字符'); return }
+  if (!Number.isInteger(teacherTypeDraft.sort) || teacherTypeDraft.sort < 0 || teacherTypeDraft.sort > 999) { ElMessage.warning('排序必须为 0 至 999 的整数'); return }
+  if (teacherTypes.value.some(item => item.name === name && item.id !== teacherTypeDraft.id)) {
+    ElMessage.warning('相同教师类型已存在')
     return
   }
+  const editingExistingType = Boolean(teacherTypeDraft.id)
   teacherTypeSaving.value = true
   await new Promise<void>(resolve => window.setTimeout(resolve, 350))
   if (teacherTypeDraft.id) {
     const index = teacherTypes.value.findIndex(item => item.id === teacherTypeDraft.id)
     if (index >= 0) {
-      const previousParentType = teacherTypes.value[index].parentType
-      teacherTypes.value[index] = { id:teacherTypeDraft.id, parentType, teacherType:childType, description:teacherTypeDraft.description.trim(), sort:teacherTypeDraft.sort, enabled:teacherTypeDraft.enabled }
-      if (previousParentType !== parentType) {
-        rows.value.forEach(teacher => { if (teacher.type === previousParentType) teacher.type = parentType })
-        if (current.value.type === previousParentType) current.value.type = parentType
+      const previousName = teacherTypes.value[index].name
+      teacherTypes.value[index] = { id:teacherTypeDraft.id, name, sort:teacherTypeDraft.sort, enabled:teacherTypeDraft.enabled }
+      if (previousName !== name) {
+        rows.value.forEach(teacher => { if (teacher.type === previousName) teacher.type = name })
+        if (current.value.type === previousName) current.value.type = name
       }
     }
   } else {
-    teacherTypes.value.push({ id:`type-${Date.now()}`, parentType, teacherType:childType, description:teacherTypeDraft.description.trim(), sort:teacherTypeDraft.sort, enabled:teacherTypeDraft.enabled })
+    teacherTypes.value.push({ id:`type-${Date.now()}`, name, sort:teacherTypeDraft.sort, enabled:teacherTypeDraft.enabled })
   }
   persistTeacherTypes()
   teacherTypeSaving.value = false
-  teacherTypeDialog.value = false
-  ElMessage.success(teacherTypeDraft.id ? '教师类型已更新' : '教师类型已新增')
+  cancelTeacherTypeEdit()
+  ElMessage.success(editingExistingType ? '教师类型已更新' : '教师类型已新增')
 }
 function updateTeacherTypeStatus(item: TeacherTypeItem): void {
   persistTeacherTypes()
   ElMessage.success(item.enabled ? '教师类型已启用' : '教师类型已停用')
 }
 async function deleteTeacherType(item: TeacherTypeItem): Promise<void> {
-  const usage = rows.value.filter(teacher => teacher.type === item.parentType).length
+  const usage = rows.value.filter(teacher => teacher.type === item.name).length
   try {
-    await ElMessageBox.confirm(usage ? `该类型已关联 ${usage} 位教师，删除后已保存资料仍保留原类型，但无法再次选择。确定删除吗？` : `确定删除教师类型“${item.parentType}”吗？`, '删除教师类型', { type:'warning', confirmButtonText:'删除', cancelButtonText:'取消' })
+    await ElMessageBox.confirm(usage ? `该类型已关联 ${usage} 位教师，删除后已保存资料仍保留原类型，但无法再次选择。确定删除吗？` : `确定删除教师类型“${item.name}”吗？`, '删除教师类型', { type:'warning', confirmButtonText:'删除', cancelButtonText:'取消' })
   } catch { return }
   teacherTypes.value = teacherTypes.value.filter(type => type.id !== item.id)
   const maxPage = Math.max(1, Math.ceil(filteredTeacherTypes.value.length / teacherTypePageSize.value))
@@ -362,6 +373,10 @@ async function deleteTeacherType(item: TeacherTypeItem): Promise<void> {
 }
 const isPrimaryOnly = computed(() => current.value.grades.length === 1 && current.value.grades[0] === '小学')
 const portraitGenerating = ref(false)
+const defaultOriginalPortraitUrl = 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?auto=format&fit=crop&w=480&q=85'
+const defaultAiPortraitUrl = 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=480&q=85'
+const originalPortraitUrl = ref(defaultOriginalPortraitUrl)
+const aiPortraitUrl = ref(defaultAiPortraitUrl)
 function isSubjectDisabled(subject: string): boolean {
   return isPrimaryOnly.value && !primarySubjects.includes(subject)
 }
@@ -370,12 +385,35 @@ function handleGradesChange(): void {
     current.value.subjects = current.value.subjects.filter(subject => primarySubjects.includes(subject))
   }
 }
-function startPortraitGeneration(): void {
-  portraitGenerating.value = true
-  window.setTimeout(() => {
-    portraitGenerating.value = false
-    ElMessage.success('AI 形象照已生成')
-  }, 1800)
+function setPortraitUrls(teacher: Teacher): void {
+  originalPortraitUrl.value = teacher.originalPortraitUrl || defaultOriginalPortraitUrl
+  aiPortraitUrl.value = teacher.aiPortraitUrl || defaultAiPortraitUrl
+}
+function startPortraitGeneration(file: UploadFile): void {
+  if (!file.raw) return
+  if (!file.raw.type.startsWith('image/')) {
+    ElMessage.warning('请上传图片文件')
+    return
+  }
+  if (file.raw.size > 10 * 1024 * 1024) {
+    ElMessage.warning('图片大小不能超过 10MB')
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    if (typeof reader.result !== 'string') return
+    originalPortraitUrl.value = reader.result
+    current.value.originalPortraitUrl = reader.result
+    portraitGenerating.value = true
+    window.setTimeout(() => {
+      // 原型阶段以本地上传图模拟 AI 成片，接入服务后替换为生成结果 URL。
+      aiPortraitUrl.value = reader.result as string
+      current.value.aiPortraitUrl = aiPortraitUrl.value
+      portraitGenerating.value = false
+      ElMessage.success('AI 形象照已生成')
+    }, 1800)
+  }
+  reader.readAsDataURL(file.raw)
 }
 const drawer = ref(false); const active = ref<'base'|'display'>('base'); const current = ref<Teacher>(cloneTeacher(rows.value[0])); const saving = ref(false); const page = ref(1); const editing = ref(false); const auditDialog = ref(false); const auditDecision = ref<AuditStatus>('审核通过'); const auditNote = ref('')
 function isSharedApplication(value: unknown): value is SharedTeacherApplication {
@@ -627,26 +665,19 @@ function updateAchievementStatus(): void {
   persistContentTemplates()
   ElMessage.success('教学成果状态已更新')
 }
-async function removeAchievementItem(item: TeachingAchievementItem): Promise<void> {
-  try {
-    await ElMessageBox.confirm(`删除后用户端将不再展示“${item.title}”，确定删除吗？`, '删除教学成果', { type:'warning', confirmButtonText:'删除', cancelButtonText:'取消' })
-  } catch { return }
-  teachingAchievements.value = teachingAchievements.value.filter(option => option.id !== item.id)
-  persistContentTemplates()
-  ElMessage.success('教学成果已删除')
-}
-function open(row:Teacher, display=false, edit=false):void { current.value=cloneTeacher(row); active.value=display?'display':'base'; editing.value=edit; drawer.value=true }
+function open(row:Teacher, display=false, edit=false):void { current.value=cloneTeacher(row); setPortraitUrls(current.value); active.value=display?'display':'base'; editing.value=edit; drawer.value=true }
 function beginTeacherEdit():void { editing.value=true }
 function cancelTeacherEdit():void {
   const source = rows.value.find(row => row.id === current.value.id)
   if (source) current.value = cloneTeacher(source)
+  setPortraitUrls(current.value)
   portraitGenerating.value = false
   editing.value = false
 }
 function reset():void { queryRef.value?.resetFields() }
 function refresh():void { hydrateSubmittedApplication(); ElMessage.success('列表已刷新') }
 function add():void { ElMessage.info('已打开新增教师流程') }
-function goToOnboarding():void { window.location.href='/teacher-onboarding/' }
+function goToOnboarding():void { window.location.href='../teacher-onboarding/' }
 async function save():Promise<void>{saving.value=true; await new Promise<void>(r=>window.setTimeout(r,450)); const index=rows.value.findIndex(row=>row.id===current.value.id);if(index>=0)rows.value[index]=cloneTeacher(current.value);saving.value=false;drawer.value=false;ElMessage.success('教师资料已保存')}
 async function submitAudit():Promise<void>{if(auditDecision.value==='已驳回'&&!auditNote.value.trim()){ElMessage.warning('请填写驳回原因');return};saving.value=true;await new Promise<void>(r=>window.setTimeout(r,450));current.value.auditStatus=auditDecision.value;const index=rows.value.findIndex(row=>row.id===current.value.id);if(index>=0)rows.value[index]=cloneTeacher(current.value);saving.value=false;auditDialog.value=false;drawer.value=false;auditNote.value='';ElMessage.success(auditDecision.value==='审核通过'?'审核已通过':'已驳回教师申请')}
 </script>
@@ -661,46 +692,29 @@ async function submitAudit():Promise<void>{if(auditDecision.value==='已驳回'&
       <el-tabs v-model="contentManagementTab" class="content-management-tabs">
         <el-tab-pane label="教师类型" name="types">
           <section class="template-section teacher-type-section">
-            <div class="teacher-tag-toolbar">
-              <el-form :model="teacherTypeQuery" inline @submit.prevent="searchTeacherTypes">
-                <el-form-item label="父类型"><el-select v-model="teacherTypeQuery.parentType" clearable filterable placeholder="全部父类型"><el-option v-for="item in teacherTypeParentOptions" :key="item" :label="item" :value="item"/></el-select></el-form-item>
-                <el-form-item label="状态"><el-select v-model="teacherTypeQuery.status" clearable placeholder="全部状态"><el-option label="已启用" value="enabled"/><el-option label="已停用" value="disabled"/></el-select></el-form-item>
-                <el-form-item><el-button type="primary" :icon="Search" native-type="submit" :loading="teacherTypeListLoading">搜索</el-button><el-button @click="resetTeacherTypeQuery">重置</el-button></el-form-item>
-              </el-form>
-              <el-button type="primary" :icon="Plus" @click="openTeacherTypeDialog()">新增教师类型</el-button>
-            </div>
-            <el-table v-loading="teacherTypeListLoading" :data="teacherTypePageRows" border stripe row-key="id" empty-text="暂无符合条件的教师类型">
+            <div class="template-section-head"><p>维护教师资料使用的运营分类，并同步到教师详情与编辑。</p><div class="template-section-actions"><span>共 {{ filteredTeacherTypes.length }} 条</span><el-button size="small" :icon="Plus" :disabled="editingTeacherTypeId !== null" @click="startNewTeacherType">新增教师类型</el-button></div></div>
+            <el-table :data="teacherTypeTableRows" border stripe row-key="id" empty-text="暂无教师类型" :row-class-name="teacherTypeRowClassName">
               <el-table-column type="index" :index="teacherTypeIndex" label="序号" width="70" align="center"/>
-              <el-table-column prop="parentType" label="父类型" min-width="130" show-overflow-tooltip/>
-              <el-table-column prop="teacherType" label="教师类型" min-width="130" show-overflow-tooltip/>
-              <el-table-column prop="description" label="类型说明" min-width="260" show-overflow-tooltip><template #default="{row}">{{ row.description || '-' }}</template></el-table-column>
-              <el-table-column prop="sort" label="排序" width="90" align="center" sortable/>
-              <el-table-column label="状态" width="100"><template #default="{row}"><el-switch v-model="row.enabled" inline-prompt active-text="启用" inactive-text="停用" @change="updateTeacherTypeStatus(row)"/></template></el-table-column>
-              <el-table-column label="操作" width="140" fixed="right"><template #default="{row}"><el-button link type="primary" @click="openTeacherTypeDialog(row)">编辑</el-button><el-button link type="danger" @click="deleteTeacherType(row)">删除</el-button></template></el-table-column>
+              <el-table-column label="教师类型" min-width="180" show-overflow-tooltip><template #default="{row}"><el-input v-if="editingTeacherTypeId === row.id" v-model="teacherTypeDraft.name" maxlength="20" show-word-limit placeholder="请输入教师类型名称"/><span v-else>{{ row.name }}</span></template></el-table-column>
+              <el-table-column label="排序" width="150" align="center" sortable><template #default="{row}"><el-input-number v-if="editingTeacherTypeId === row.id" v-model="teacherTypeDraft.sort" class="inline-config-number" :min="0" :max="999" :step="1" controls-position="right"/><span v-else>{{ row.sort }}</span></template></el-table-column>
+              <el-table-column label="状态" width="100"><template #default="{row}"><el-switch v-if="editingTeacherTypeId === row.id" v-model="teacherTypeDraft.enabled" inline-prompt active-text="启用" inactive-text="停用"/><el-switch v-else v-model="row.enabled" inline-prompt active-text="启用" inactive-text="停用" :disabled="editingTeacherTypeId !== null" @change="updateTeacherTypeStatus(row)"/></template></el-table-column>
+              <el-table-column label="操作" width="140" fixed="right"><template #default="{row}"><template v-if="editingTeacherTypeId === row.id"><el-button link @click="cancelTeacherTypeEdit">取消</el-button><el-button link type="primary" :loading="teacherTypeSaving" @click="saveTeacherType">保存</el-button></template><template v-else><el-button link type="primary" :disabled="editingTeacherTypeId !== null" @click="startTeacherTypeEdit(row)">编辑</el-button><el-button link type="danger" :disabled="editingTeacherTypeId !== null" @click="deleteTeacherType(row)">删除</el-button></template></template></el-table-column>
             </el-table>
-            <div class="teacher-tag-pagebar"><span>共 {{ filteredTeacherTypes.length }} 条教师类型</span><el-pagination v-model:current-page="teacherTypePage" v-model:page-size="teacherTypePageSize" :total="filteredTeacherTypes.length" :page-sizes="[5,10,20]" layout="total, sizes, prev, pager, next, jumper" @size-change="teacherTypePage=1"/></div>
+            <div class="teacher-tag-pagebar"><span>共 {{ filteredTeacherTypes.length }} 条教师类型</span><el-pagination v-model:current-page="teacherTypePage" v-model:page-size="teacherTypePageSize" :total="filteredTeacherTypes.length" :page-sizes="[5,10,20]" layout="total, sizes, prev, pager, next, jumper" :disabled="editingTeacherTypeId !== null" @size-change="teacherTypePage=1"/></div>
           </section>
         </el-tab-pane>
         <el-tab-pane label="教师标签" name="tags">
           <section class="template-section teacher-tag-section">
-            <div class="teacher-tag-toolbar">
-              <el-form :model="teacherTagQuery" inline @submit.prevent="searchTeacherTags">
-                <el-form-item label="标签名称"><el-input v-model="teacherTagQuery.name" clearable maxlength="20" placeholder="请输入标签名称"/></el-form-item>
-                <el-form-item label="标签状态"><el-select v-model="teacherTagQuery.status" clearable placeholder="全部状态"><el-option label="已启用" value="enabled"/><el-option label="已停用" value="disabled"/></el-select></el-form-item>
-                <el-form-item label="创建人信息"><el-input v-model="teacherTagQuery.creator" clearable placeholder="创建人名称/账号"/></el-form-item>
-                <el-form-item><el-button type="primary" :icon="Search" native-type="submit" :loading="teacherTagListLoading">搜索</el-button><el-button @click="resetTeacherTagQuery">重置</el-button></el-form-item>
-              </el-form>
-              <el-button type="primary" :icon="Plus" @click="openTeacherTagDialog()">新增教师标签</el-button>
-            </div>
-            <el-table v-loading="teacherTagListLoading" :data="teacherTagPageRows" border stripe row-key="id" empty-text="暂无符合条件的教师标签">
+            <div class="template-section-head"><p>维护教师身份、能力和运营特征标签，并同步到教师编辑。</p><div class="template-section-actions"><span>共 {{ filteredTeacherTags.length }} 条</span><el-button size="small" :icon="Plus" :disabled="editingTeacherTagId !== null" @click="startNewTeacherTag">新增教师标签</el-button></div></div>
+            <el-table :data="teacherTagTableRows" border stripe row-key="id" empty-text="暂无教师标签" :row-class-name="teacherTagRowClassName">
               <el-table-column type="index" :index="teacherTagIndex" label="序号" width="70" align="center"/>
-              <el-table-column prop="name" label="标签名称" min-width="150" show-overflow-tooltip><template #default="{row}"><el-tag effect="plain">{{ row.name }}</el-tag></template></el-table-column>
-              <el-table-column label="状态" width="100"><template #default="{row}"><el-switch v-model="row.enabled" inline-prompt active-text="启用" inactive-text="停用" @change="updateTeacherTagStatus(row)"/></template></el-table-column>
-              <el-table-column prop="sort" label="排序" width="80" align="center" sortable/>
+              <el-table-column label="标签名称" min-width="180" show-overflow-tooltip><template #default="{row}"><el-input v-if="editingTeacherTagId === row.id" v-model="teacherTagDraft.name" maxlength="20" show-word-limit placeholder="请输入标签名称"/><el-tag v-else effect="plain" disable-transitions>{{ row.name }}</el-tag></template></el-table-column>
+              <el-table-column label="状态" width="100"><template #default="{row}"><el-switch v-if="editingTeacherTagId === row.id" v-model="teacherTagDraft.enabled" inline-prompt active-text="启用" inactive-text="停用"/><el-switch v-else v-model="row.enabled" inline-prompt active-text="启用" inactive-text="停用" :disabled="editingTeacherTagId !== null" @change="updateTeacherTagStatus(row)"/></template></el-table-column>
+              <el-table-column label="排序" width="150" align="center" sortable><template #default="{row}"><el-input-number v-if="editingTeacherTagId === row.id" v-model="teacherTagDraft.sort" class="inline-config-number" :min="0" :max="999" :step="1" controls-position="right"/><span v-else>{{ row.sort }}</span></template></el-table-column>
               <el-table-column prop="updatedAt" label="更新时间" width="170"/>
-              <el-table-column label="操作" width="140" fixed="right"><template #default="{row}"><el-button link type="primary" @click="openTeacherTagDialog(row)">编辑</el-button><el-button link type="danger" @click="deleteTeacherTag(row)">删除</el-button></template></el-table-column>
+              <el-table-column label="操作" width="140" fixed="right"><template #default="{row}"><template v-if="editingTeacherTagId === row.id"><el-button link @click="cancelTeacherTagEdit">取消</el-button><el-button link type="primary" :loading="teacherTagSaving" @click="saveTeacherTag">保存</el-button></template><template v-else><el-button link type="primary" :disabled="editingTeacherTagId !== null" @click="startTeacherTagEdit(row)">编辑</el-button><el-button link type="danger" :disabled="editingTeacherTagId !== null" @click="deleteTeacherTag(row)">删除</el-button></template></template></el-table-column>
             </el-table>
-            <div class="teacher-tag-pagebar"><span>共 {{ filteredTeacherTags.length }} 条教师标签</span><el-pagination v-model:current-page="teacherTagPage" v-model:page-size="teacherTagPageSize" :total="filteredTeacherTags.length" :page-sizes="[5,10,20]" layout="total, sizes, prev, pager, next, jumper" @size-change="teacherTagPage=1"/></div>
+            <div class="teacher-tag-pagebar"><span>共 {{ filteredTeacherTags.length }} 条教师标签</span><el-pagination v-model:current-page="teacherTagPage" v-model:page-size="teacherTagPageSize" :total="filteredTeacherTags.length" :page-sizes="[5,10,20]" layout="total, sizes, prev, pager, next, jumper" :disabled="editingTeacherTagId !== null" @size-change="teacherTagPage=1"/></div>
           </section>
         </el-tab-pane>
         <el-tab-pane label="个人简介" name="intros">
@@ -734,7 +748,7 @@ async function submitAudit():Promise<void>{if(auditDecision.value==='已驳回'&
           <el-table-column label="副标题" width="210"><template #default="{row}"><el-input v-if="editingAchievementId === row.id" v-model="inlineAchievementDraft.subtitle" maxlength="30" show-word-limit placeholder="例如：初三学生 · 李同学"/><span v-else>{{ row.subtitle }}</span></template></el-table-column>
           <el-table-column label="强化副标题" width="180"><template #default="{row}"><el-input v-if="editingAchievementId === row.id" v-model="inlineAchievementDraft.highlight" maxlength="20" show-word-limit placeholder="例如：提升 38 分"/><strong v-else class="achievement-highlight">{{ row.highlight }}</strong></template></el-table-column>
           <el-table-column label="状态" width="100"><template #default="{row}"><el-switch v-if="editingAchievementId === row.id" v-model="inlineAchievementDraft.enabled" inline-prompt active-text="展示" inactive-text="隐藏"/><el-switch v-else v-model="row.enabled" inline-prompt active-text="展示" inactive-text="隐藏" :disabled="editingAchievementId !== null" @change="updateAchievementStatus"/></template></el-table-column>
-          <el-table-column label="操作" width="140" fixed="right"><template #default="{row}"><template v-if="editingAchievementId === row.id"><el-button link @click="cancelAchievementEdit">取消</el-button><el-button link type="primary" :loading="achievementSaving" @click="saveAchievementItem">保存</el-button></template><template v-else><el-button link type="primary" :disabled="editingAchievementId !== null" @click="startAchievementEdit(row)">编辑</el-button><el-button link type="danger" :disabled="editingAchievementId !== null" @click="removeAchievementItem(row)">删除</el-button></template></template></el-table-column>
+          <el-table-column label="操作" width="120" fixed="right"><template #default="{row}"><template v-if="editingAchievementId === row.id"><el-button link @click="cancelAchievementEdit">取消</el-button><el-button link type="primary" :loading="achievementSaving" @click="saveAchievementItem">保存</el-button></template><template v-else><el-button link type="primary" :disabled="editingAchievementId !== null" @click="startAchievementEdit(row)">编辑</el-button></template></template></el-table-column>
         </el-table>
       </section>
         </el-tab-pane>
@@ -757,12 +771,12 @@ async function submitAudit():Promise<void>{if(auditDecision.value==='已驳回'&
       </aside>
       <el-scrollbar class="editor-body">
         <el-form :model="current" label-position="top" class="editor-form" :disabled="!editing">
-          <section class="form-section"><h3>基本资料</h3><el-row :gutter="14"><el-col :span="5"><el-form-item label="教师姓名" required><el-input v-model="current.name" :disabled="!editing"/></el-form-item></el-col><el-col :span="5"><el-form-item label="手机号"><el-input :model-value="current.phone.replace('****','2888')" disabled/></el-form-item></el-col><el-col :span="5"><el-form-item label="教师类型" required><el-select v-model="current.type" :disabled="!editing"><el-option v-for="item in enabledTeacherTypes" :key="item.id" :label="item.parentType" :value="item.parentType"/></el-select></el-form-item></el-col><el-col :span="4"><el-form-item label="性别" required><el-select model-value="男" :disabled="!editing"><el-option value="男"/><el-option value="女"/></el-select></el-form-item></el-col><el-col :span="5"><el-form-item label="年龄"><el-input class="numeric-input" model-value="35" type="number" inputmode="numeric" :disabled="!editing" min="18" max="80" step="1"/></el-form-item></el-col></el-row></section>
+          <section class="form-section"><h3>基本资料</h3><el-row :gutter="14"><el-col :span="5"><el-form-item label="教师姓名" required><el-input v-model="current.name" :disabled="!editing"/></el-form-item></el-col><el-col :span="5"><el-form-item label="手机号"><el-input :model-value="current.phone.replace('****','2888')" disabled/></el-form-item></el-col><el-col :span="5"><el-form-item label="教师类型" required><el-select v-model="current.type" :disabled="!editing"><el-option v-for="item in enabledTeacherTypes" :key="item.id" :label="item.name" :value="item.name"/></el-select></el-form-item></el-col><el-col :span="4"><el-form-item label="性别" required><el-select model-value="男" :disabled="!editing"><el-option value="男"/><el-option value="女"/></el-select></el-form-item></el-col><el-col :span="5"><el-form-item label="年龄"><el-input class="numeric-input" model-value="35" type="number" inputmode="numeric" :disabled="!editing" min="18" max="80" step="1"/></el-form-item></el-col></el-row></section>
           <section class="form-section"><h3>教学能力配置</h3><el-form-item label="授课年级" required><el-checkbox-group v-model="current.grades" :disabled="!editing" @change="handleGradesChange"><el-checkbox v-for="grade in ['小学','初一-初二','初三','高一-高二','高三']" :key="grade" :label="grade"/></el-checkbox-group></el-form-item><el-form-item label="授课科目" required><el-checkbox-group v-model="current.subjects" :disabled="!editing"><el-checkbox v-for="subject in subjectOptions" :key="subject" :label="subject" :disabled="!editing || isSubjectDisabled(subject)"/></el-checkbox-group></el-form-item><el-row :gutter="18"><el-col :span="8"><el-form-item label="教龄（年）" required><el-input-number v-model="current.experience" :disabled="!editing" :min="0" :max="99" :step="1" controls-position="right"/></el-form-item></el-col><el-col :span="16"><el-form-item label="授课方式"><el-checkbox :model-value="true" :disabled="!editing">线上</el-checkbox><el-checkbox :disabled="!editing">线下</el-checkbox><el-checkbox :model-value="true" :disabled="!editing">上门</el-checkbox></el-form-item></el-col></el-row></section>
           <section class="form-section"><h3>学历与资格认证</h3><el-row :gutter="18"><el-col :span="8"><el-form-item label="最高学历" required><el-select v-model="current.education" :disabled="!editing"><el-option value="本科"/><el-option value="硕士研究生"/><el-option value="博士研究生"/></el-select></el-form-item></el-col><el-col :span="8"><el-form-item label="毕业院校" required><el-input v-model="current.school" :disabled="!editing"/></el-form-item></el-col><el-col :span="8"><el-form-item label="学历展示"><el-switch :model-value="true" :disabled="!editing" active-text="展示" inactive-text="隐藏"/></el-form-item></el-col></el-row><el-form-item label="资质证明"><div class="qualification-proof">已上传资质材料</div></el-form-item></section>
-          <section class="form-section"><h3>教学侧重</h3><el-form-item label="教学侧重"><el-checkbox-group v-model="teachingFocus" :disabled="!editing" class="teacher-focus-options"><el-checkbox v-for="focus in teachingFocusOptions" :key="focus.id" :label="focus.title"><span class="teacher-focus-card"><img v-if="isUploadedFocusIcon(focus.icon)" :src="focus.icon" :alt="`${focus.title}图标`"><el-icon v-else><component :is="focusIconComponent(focus.icon)"/></el-icon><span><b>{{ focus.title }}</b><small>{{ focus.subtitle }}</small></span></span></el-checkbox></el-checkbox-group></el-form-item></section>
+          <section class="form-section"><h3>教学侧重</h3><el-form-item label="教学侧重（最多 3 项）"><el-checkbox-group v-model="teachingFocus" :disabled="!editing" class="teacher-focus-options" @change="limitTeachingFocusSelection"><el-checkbox v-for="focus in teachingFocusOptions" :key="focus.id" :label="focus.title" :disabled="!editing || isTeachingFocusOptionDisabled(focus.title)" :class="{ 'is-limit-disabled': editing && isTeachingFocusOptionDisabled(focus.title) }"><span class="teacher-focus-card"><img v-if="isUploadedFocusIcon(focus.icon)" :src="focus.icon" :alt="`${focus.title}图标`"><el-icon v-else><component :is="focusIconComponent(focus.icon)"/></el-icon><span><b>{{ focus.title }}</b><small>{{ focus.subtitle }}</small></span></span></el-checkbox></el-checkbox-group><p class="teaching-focus-limit">已选 {{ teachingFocus.length }}/3 项</p></el-form-item></section>
           <section class="form-section"><h3>教师标签</h3><el-form-item label="教师标签"><el-select v-model="current.tags" multiple filterable collapse-tags :max-collapse-tags="4" placeholder="请选择教师标签" :disabled="!editing"><el-option v-for="tag in enabledTeacherTags" :key="tag.id" :label="tag.name" :value="tag.name"/></el-select></el-form-item></section>
-          <section class="form-section"><h3>教师介绍与形象照</h3><el-row :gutter="18"><el-col :span="16"><el-form-item label="个人简介" required><el-input v-model="current.intro" type="textarea" :rows="4" :maxlength="300" show-word-limit :disabled="!editing"/></el-form-item></el-col><el-col :span="8"><el-form-item label="教师形象照" required><div class="portrait-upload"><div v-if="portraitGenerating" class="portrait-generating"><el-icon class="is-loading"><Loading/></el-icon><span>AI 生成中</span></div><div v-else class="portrait-ready"><div class="portrait-preview"></div><el-tag type="success" size="small">AI 已生成</el-tag></div><el-upload v-if="editing" accept="image/*" :auto-upload="false" :show-file-list="false" :disabled="portraitGenerating" @change="startPortraitGeneration"><el-button :icon="UploadFilled" :disabled="portraitGenerating">{{ portraitGenerating ? 'AI 生成中' : '重新上传原图' }}</el-button></el-upload></div></el-form-item></el-col></el-row></section>
+          <section class="form-section"><h3>教师介绍与形象照</h3><el-row :gutter="18"><el-col :span="16"><el-form-item label="个人简介" required><el-input v-model="current.intro" type="textarea" :rows="4" :maxlength="300" show-word-limit :disabled="!editing"/></el-form-item></el-col><el-col :span="8"><el-form-item label="教师形象照" required><div class="portrait-upload"><div class="portrait-pair"><div class="portrait-item"><el-image class="portrait-preview" :src="originalPortraitUrl" :preview-src-list="[originalPortraitUrl]" :preview-teleported="true" fit="cover" alt="用户上传原图"/><span>用户上传原图</span></div><div class="portrait-item"><div v-if="portraitGenerating" class="portrait-generating"><el-icon class="is-loading"><Loading/></el-icon><span>AI 生成中</span></div><el-image v-else class="portrait-preview" :src="aiPortraitUrl" :preview-src-list="[aiPortraitUrl]" :preview-teleported="true" fit="cover" alt="AI 生成图"/><span>AI 生成图</span></div></div><el-upload v-if="editing" accept="image/png,image/jpeg,image/webp" :auto-upload="false" :show-file-list="false" :disabled="portraitGenerating" @change="startPortraitGeneration"><el-button :icon="UploadFilled" :disabled="portraitGenerating">{{ portraitGenerating ? 'AI 生成中' : '重新上传原图' }}</el-button></el-upload></div></el-form-item></el-col></el-row></section>
         </el-form>
       </el-scrollbar>
     </div>
@@ -772,28 +786,10 @@ async function submitAudit():Promise<void>{if(auditDecision.value==='已驳回'&
     <el-form label-position="top"><el-form-item label="审核结论" required><el-radio-group v-model="auditDecision"><el-radio value="审核通过">审核通过</el-radio><el-radio value="已驳回">驳回申请</el-radio></el-radio-group></el-form-item><el-form-item label="审核意见" :required="auditDecision === '已驳回'"><el-input v-model="auditNote" type="textarea" :rows="3" maxlength="200" show-word-limit :placeholder="auditDecision === '已驳回' ? '请填写驳回原因' : '可填写审核说明'"/></el-form-item></el-form>
     <template #footer><el-button @click="auditDialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="submitAudit">确认审核</el-button></template>
   </el-dialog>
-  <el-dialog v-model="teacherTagDialog" :title="teacherTagDraft.id ? '编辑教师标签' : '新增教师标签'" width="560px" append-to-body :close-on-click-modal="false" class="teacher-tag-dialog">
-    <el-form ref="teacherTagFormRef" :model="teacherTagDraft" :rules="teacherTagRules" label-width="92px" status-icon scroll-to-error>
-      <el-form-item label="标签名称" prop="name"><el-input v-model="teacherTagDraft.name" maxlength="20" show-word-limit placeholder="请输入标签名称"/></el-form-item>
-      <el-form-item label="标签状态" prop="enabled"><el-radio-group v-model="teacherTagDraft.enabled"><el-radio-button :value="true">启用</el-radio-button><el-radio-button :value="false">停用</el-radio-button></el-radio-group></el-form-item>
-      <el-form-item label="排序" prop="sort"><el-input-number v-model="teacherTagDraft.sort" :min="0" :max="999" :step="1" controls-position="right"/><span class="tag-sort-help">数值越大越靠前</span></el-form-item>
-    </el-form>
-    <template #footer><el-button :disabled="teacherTagSaving" @click="teacherTagDialog=false">取消</el-button><el-button type="primary" :loading="teacherTagSaving" @click="saveTeacherTag">保存</el-button></template>
-  </el-dialog>
-  <el-dialog v-model="teacherTypeDialog" :title="teacherTypeDraft.id ? '编辑教师类型' : '新增教师类型'" width="620px" append-to-body :close-on-click-modal="false" class="teacher-type-dialog">
-    <el-form ref="teacherTypeFormRef" :model="teacherTypeDraft" :rules="teacherTypeRules" label-width="92px" status-icon scroll-to-error>
-      <el-form-item label="父类型" prop="parentType"><el-input v-model="teacherTypeDraft.parentType" maxlength="20" show-word-limit placeholder="请输入父类型名称"/></el-form-item>
-      <el-form-item label="教师类型"><el-input v-model="teacherTypeDraft.teacherType" maxlength="20" show-word-limit placeholder="选填，未填写时列表显示 -"/></el-form-item>
-      <el-form-item label="类型说明"><el-input v-model="teacherTypeDraft.description" type="textarea" :rows="3" maxlength="100" show-word-limit placeholder="选填，请说明类型适用范围"/></el-form-item>
-      <el-form-item label="排序" prop="sort"><el-input-number v-model="teacherTypeDraft.sort" :min="0" :max="999" :step="1" controls-position="right"/><span class="tag-sort-help">数值越大越靠前</span></el-form-item>
-      <el-form-item label="状态" prop="enabled"><el-radio-group v-model="teacherTypeDraft.enabled"><el-radio-button :value="true">启用</el-radio-button><el-radio-button :value="false">停用</el-radio-button></el-radio-group></el-form-item>
-    </el-form>
-    <template #footer><el-button :disabled="teacherTypeSaving" @click="teacherTypeDialog=false">取消</el-button><el-button type="primary" :loading="teacherTypeSaving" @click="saveTeacherType">保存</el-button></template>
-  </el-dialog>
 </template>
 
 <style>
-.template-management .el-table .template-editing-row td.el-table__cell{background:#f5f9ff!important;vertical-align:top}.template-management .template-editing-row .cell{padding-top:10px;padding-bottom:10px}.inline-template-content textarea{min-height:54px!important}.template-content-text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.template-editing-row .el-textarea__inner{font-size:13px;line-height:20px}.template-editing-row .el-input__count{line-height:18px}
+.template-management .el-table .template-editing-row td.el-table__cell{background:#f5f9ff!important;vertical-align:top}.template-management .template-editing-row .cell{padding-top:10px;padding-bottom:10px}.inline-template-content textarea{min-height:54px!important}.template-content-text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.template-editing-row .el-textarea__inner{font-size:13px;line-height:20px}.template-editing-row .el-input__count{line-height:18px}.template-editing-row .inline-config-number{width:112px}
 .achievement-highlight{color:#1677ff;letter-spacing:0}.achievement-template-section .el-table b,.achievement-template-section .el-table strong{letter-spacing:0}
 .person .el-avatar,.photo{background-image:url('https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=480&q=85');background-position:center;background-size:cover;color:transparent}
 .details .group:has(.photo) .el-col:first-child{display:none}
@@ -820,11 +816,11 @@ async function submitAudit():Promise<void>{if(auditDecision.value==='已驳回'&
 <style>
 .el-overlay.is-drawer{display:none!important}
 .teacher-editor{--el-dialog-padding-primary:0;width:min(1280px,calc(100vw - 96px))!important;border-radius:8px;overflow:hidden}.teacher-editor .el-dialog__header{height:58px;margin:0;padding:0;border-bottom:1px solid #e7ebf1}.editor-title{height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:16px;font-weight:600;color:#253044}.editor-title-actions{display:flex;align-items:center;gap:10px}.editor-title-actions .el-button--primary{min-width:64px;height:32px;font-weight:600}.editor-title-actions .el-button.is-link{font-size:20px;color:#8791a1}.teacher-editor .el-dialog__body{padding:0;background:#fff}.teacher-editor .el-dialog__footer{height:66px;padding:14px 20px;border-top:1px solid #e7ebf1;background:#fff}
-.editor-layout{display:grid;grid-template-columns:250px minmax(0,1fr);height:min(660px,calc(88vh - 124px));min-height:420px;background:#fff!important}.teacher-summary{margin:18px 0 18px 18px;padding:20px;background:#f7f9fc;border:1px solid #dfe8f4;border-radius:7px}.summary-photo,.portrait-preview{background-image:url('https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=480&q=85');background-position:center;background-size:cover}.summary-photo{width:84px;height:84px;margin-bottom:14px;border-radius:50%;border:3px solid #fff;box-shadow:0 1px 5px rgb(30 50 70 / 15%)}.teacher-summary h2{margin:0 0 5px;font-size:18px;color:#2b3443}.teacher-summary p,.summary-id{margin:0;color:#7a8798;font-size:13px}.summary-id{display:block;margin-top:4px}.summary-status{display:flex;gap:6px;margin:16px 0}.summary-status .el-tag{border:0}.summary-lines{border-top:1px solid #dbe4ef}.summary-lines div{padding:12px 0;border-bottom:1px solid #dbe4ef}.summary-lines span,.summary-lines b{display:block;font-size:12px}.summary-lines span{margin-bottom:4px;color:#8490a2}.summary-lines b{font-weight:500;color:#485568;line-height:18px;word-break:break-all}
-.editor-body{height:100%;padding:18px 26px 24px}.editor-form{max-width:850px}.form-section{padding:0 0 16px;margin-bottom:16px;border-bottom:1px solid #ebeff4}.form-section:last-child{border-bottom:0}.form-section h3{margin:0 0 14px;font-size:14px;color:#2f3a4b}.editor-form .el-form-item{margin-bottom:14px}.editor-form .el-form-item__label{padding-bottom:5px;font-size:12px;line-height:18px;color:#606b7a}.editor-form .el-select,.editor-form .el-input-number{width:100%}.editor-form .el-checkbox{margin-right:18px;font-size:12px}.editor-form .el-tag{margin-right:5px}.teacher-focus-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;width:100%}.editor-form .teacher-focus-options .el-checkbox{position:relative;align-items:stretch;width:100%;height:auto;min-height:92px;margin:0;padding:12px;border:1px solid #dfe6ee;border-radius:5px;background:#fff;white-space:normal}.teacher-focus-options .el-checkbox__input{position:absolute;opacity:0;pointer-events:none}.teacher-focus-options .el-checkbox__label{width:100%;padding:0;white-space:normal}.teacher-focus-options .el-checkbox.is-checked{border-color:#409eff;background:#f3f8ff}.teacher-focus-options .el-checkbox.is-disabled{opacity:1}.teacher-focus-options .el-checkbox.is-disabled .el-checkbox__label{color:inherit}.teacher-focus-card{display:flex;align-items:flex-start;gap:10px}.teacher-focus-card>.el-icon,.teacher-focus-card>img{flex:0 0 25px;width:25px;height:25px;margin-top:1px}.teacher-focus-card>.el-icon{color:#1677ff;font-size:25px}.teacher-focus-card>img{object-fit:contain}.teacher-focus-card b,.teacher-focus-card small{display:block;letter-spacing:0}.teacher-focus-card b{margin-bottom:5px;color:#2f3a4b;font-size:13px;line-height:18px}.teacher-focus-card small{color:#7b8796;font-size:11px;line-height:17px}.numeric-input input::-webkit-outer-spin-button,.numeric-input input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}.numeric-input input[type=number]{appearance:textfield;-moz-appearance:textfield}.qualification-proof{display:flex;align-items:center;width:150px;height:42px;padding:0 12px;border:1px dashed #b9d3ed;border-radius:4px;background:#f5faff;color:#4383b8;font-size:12px}.portrait-upload{display:flex;align-items:center;gap:10px;min-height:66px}.portrait-ready{display:flex;align-items:center;gap:8px}.portrait-preview{width:88px;height:66px;border-radius:4px}.portrait-generating{display:flex;align-items:center;justify-content:center;gap:6px;width:88px;height:66px;border:1px dashed #99c7ec;border-radius:4px;background:#f5faff;color:#4383b8;font-size:12px}.portrait-generating .el-icon{font-size:16px}.portrait-upload .el-button{padding:0}
+.editor-layout{display:grid;grid-template-columns:250px minmax(0,1fr);height:min(660px,calc(88vh - 124px));min-height:420px;background:#fff!important}.teacher-summary{margin:18px 0 18px 18px;padding:20px;background:#f7f9fc;border:1px solid #dfe8f4;border-radius:7px}.summary-photo{background-image:url('https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=480&q=85');background-position:center;background-size:cover}.summary-photo{width:84px;height:84px;margin-bottom:14px;border-radius:50%;border:3px solid #fff;box-shadow:0 1px 5px rgb(30 50 70 / 15%)}.teacher-summary h2{margin:0 0 5px;font-size:18px;color:#2b3443}.teacher-summary p,.summary-id{margin:0;color:#7a8798;font-size:13px}.summary-id{display:block;margin-top:4px}.summary-status{display:flex;gap:6px;margin:16px 0}.summary-status .el-tag{border:0}.summary-lines{border-top:1px solid #dbe4ef}.summary-lines div{padding:12px 0;border-bottom:1px solid #dbe4ef}.summary-lines span,.summary-lines b{display:block;font-size:12px}.summary-lines span{margin-bottom:4px;color:#8490a2}.summary-lines b{font-weight:500;color:#485568;line-height:18px;word-break:break-all}
+.editor-body{height:100%;padding:18px 26px 24px}.editor-form{max-width:850px}.form-section{padding:0 0 16px;margin-bottom:16px;border-bottom:1px solid #ebeff4}.form-section:last-child{border-bottom:0}.form-section h3{margin:0 0 14px;font-size:14px;color:#2f3a4b}.editor-form .el-form-item{margin-bottom:14px}.editor-form .el-form-item__label{padding-bottom:5px;font-size:12px;line-height:18px;color:#606b7a}.editor-form .el-select,.editor-form .el-input-number{width:100%}.editor-form .el-checkbox{margin-right:18px;font-size:12px}.editor-form .el-tag{margin-right:5px}.teacher-focus-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;width:100%}.editor-form .teacher-focus-options .el-checkbox{position:relative;align-items:stretch;width:100%;height:auto;min-height:92px;margin:0;padding:12px;border:1px solid #dfe6ee;border-radius:5px;background:#fff;white-space:normal}.teacher-focus-options .el-checkbox__input{position:absolute;opacity:0;pointer-events:none}.teacher-focus-options .el-checkbox__label{width:100%;padding:0;white-space:normal}.teacher-focus-options .el-checkbox.is-checked{border-color:#409eff;background:#f3f8ff}.teacher-focus-options .el-checkbox.is-disabled{opacity:1}.teacher-focus-options .el-checkbox.is-disabled .el-checkbox__label{color:inherit}.teacher-focus-card{display:flex;align-items:flex-start;gap:10px}.teacher-focus-card>.el-icon,.teacher-focus-card>img{flex:0 0 25px;width:25px;height:25px;margin-top:1px}.teacher-focus-card>.el-icon{color:#1677ff;font-size:25px}.teacher-focus-card>img{object-fit:contain}.teacher-focus-card b,.teacher-focus-card small{display:block;letter-spacing:0}.teacher-focus-card b{margin-bottom:5px;color:#2f3a4b;font-size:13px;line-height:18px}.teacher-focus-card small{color:#7b8796;font-size:11px;line-height:17px}.numeric-input input::-webkit-outer-spin-button,.numeric-input input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}.numeric-input input[type=number]{appearance:textfield;-moz-appearance:textfield}.qualification-proof{display:flex;align-items:center;width:150px;height:42px;padding:0 12px;border:1px dashed #b9d3ed;border-radius:4px;background:#f5faff;color:#4383b8;font-size:12px}.portrait-upload{display:flex;align-items:flex-start;flex-direction:column;gap:10px;min-height:104px}.portrait-pair{display:flex;gap:10px}.portrait-item{display:grid;gap:5px;min-width:0}.portrait-item>span{color:#606b7a;font-size:12px;line-height:18px;text-align:center}.portrait-preview{display:block;width:104px;height:78px;border:1px solid #dfe6ee;border-radius:4px;overflow:hidden}.portrait-generating{display:flex;align-items:center;justify-content:center;gap:5px;width:104px;height:78px;border:1px dashed #99c7ec;border-radius:4px;background:#f5faff;color:#4383b8;font-size:12px}.portrait-generating .el-icon{font-size:16px}.portrait-upload .el-button{padding:0}@media(max-width:760px){.portrait-pair{flex-wrap:wrap}}
 @media(max-width:1100px){.teacher-editor{width:94%!important}.editor-layout{grid-template-columns:210px minmax(0,1fr)}.teacher-summary{margin-left:12px}.editor-body{padding:18px}.editor-form{min-width:620px}}
 </style>
 
 <style>
-.template-management{min-height:100vh;background:#f4f6f9}.template-page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}.template-page-head h1{margin:0;color:#253044;font-size:20px;letter-spacing:0}.template-page-head p{margin:6px 0 0;color:#7b8796;font-size:13px}.template-management>.el-alert{margin-bottom:16px}.content-management-tabs>.el-tabs__header{margin:0}.content-management-tabs>.el-tabs__header .el-tabs__item{height:42px;font-weight:600}.content-management-tabs .template-section{margin-top:0}.template-section{margin-top:16px;padding:18px 20px;background:#fff;border:1px solid #e2e7ee;border-radius:6px}.template-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}.template-section-head h2{margin:0;color:#2f3a4b;font-size:16px;letter-spacing:0}.template-section-head p{margin:0;color:#7b8796;font-size:12px}.template-section-head>span,.template-section-actions>span{color:#7b8796;font-size:12px}.template-section-actions{display:flex;align-items:center;gap:12px}.focus-icon-preview,.focus-icon-thumb{display:inline-grid;width:34px;height:34px;place-items:center}.focus-icon-preview img,.focus-icon-thumb img{width:30px;height:30px;object-fit:contain}.focus-icon-preview .el-icon,.focus-icon-thumb .el-icon{color:#1677ff;font-size:26px}.focus-icon-uploader{display:grid;grid-template-columns:38px auto;align-items:center;gap:4px 8px}.focus-icon-uploader small{grid-column:1/-1;color:#8a96a5;font-size:11px;letter-spacing:0}.focus-template-section .el-table b{letter-spacing:0}.teacher-tag-section{overflow:hidden}.teacher-tag-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}.teacher-tag-toolbar .el-form{display:flex;flex:1;flex-wrap:wrap;gap:0 10px}.teacher-tag-toolbar .el-form-item{margin-right:0;margin-bottom:10px}.teacher-tag-toolbar .el-input{width:190px}.teacher-tag-toolbar .el-select{width:150px}.teacher-tag-toolbar>.el-button{flex:none}.teacher-tag-section .el-table .el-tag{height:24px;padding:0 8px;font-size:12px}.teacher-tag-pagebar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:14px;color:#7b8796;font-size:12px}.teacher-tag-dialog .el-dialog__body{padding-bottom:8px}.teacher-tag-dialog .el-input-number{width:180px}.tag-sort-help{margin-left:10px;color:#8a96a5;font-size:12px}.screen.is-embedded .template-management{padding:20px 24px}.screen.is-embedded .template-section{margin-top:0}@media(max-width:1100px){.teacher-tag-toolbar{display:block}.teacher-tag-toolbar>.el-button{margin-bottom:12px}.teacher-tag-pagebar{align-items:flex-start;flex-direction:column}}
+.template-management{min-height:100vh;background:#f4f6f9}.template-page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}.template-page-head h1{margin:0;color:#253044;font-size:20px;letter-spacing:0}.template-page-head p{margin:6px 0 0;color:#7b8796;font-size:13px}.template-management>.el-alert{margin-bottom:16px}.content-management-tabs>.el-tabs__header{margin:0}.content-management-tabs>.el-tabs__header .el-tabs__item{height:42px;font-weight:600}.content-management-tabs .template-section{margin-top:0}.template-section{margin-top:16px;padding:18px 20px;background:#fff;border:1px solid #e2e7ee;border-radius:6px}.template-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}.template-section-head h2{margin:0;color:#2f3a4b;font-size:16px;letter-spacing:0}.template-section-head p{margin:0;color:#7b8796;font-size:12px}.template-section-head>span,.template-section-actions>span{color:#7b8796;font-size:12px}.template-section-actions{display:flex;align-items:center;gap:12px}.focus-icon-preview,.focus-icon-thumb{display:inline-grid;width:34px;height:34px;place-items:center}.focus-icon-preview img,.focus-icon-thumb img{width:30px;height:30px;object-fit:contain}.focus-icon-preview .el-icon,.focus-icon-thumb .el-icon{color:#1677ff;font-size:26px}.focus-icon-uploader{display:grid;grid-template-columns:38px auto;align-items:center;gap:4px 8px}.focus-icon-uploader small{grid-column:1/-1;color:#8a96a5;font-size:11px;letter-spacing:0}.focus-template-section .el-table b{letter-spacing:0}.teacher-tag-section{overflow:hidden}.teacher-tag-section .el-table .el-tag{height:24px;padding:0 8px;font-size:12px}.teacher-tag-pagebar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:14px;color:#7b8796;font-size:12px}.teaching-focus-limit{width:100%;margin:8px 0 0;color:#7b8796;font-size:12px;line-height:18px}.teacher-focus-options .el-checkbox.is-limit-disabled{border-color:#e5eaf0;background:#f6f8fa;opacity:.5;cursor:not-allowed}.teacher-focus-options .el-checkbox.is-limit-disabled .teacher-focus-card b,.teacher-focus-options .el-checkbox.is-limit-disabled .teacher-focus-card small,.teacher-focus-options .el-checkbox.is-limit-disabled .teacher-focus-card>.el-icon{color:#8d99a8}.screen.is-embedded .template-management{padding:20px 24px}.screen.is-embedded .template-section{margin-top:0}@media(max-width:1100px){.teacher-tag-pagebar{align-items:flex-start;flex-direction:column}}
 </style>
