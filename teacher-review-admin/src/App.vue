@@ -14,8 +14,8 @@ interface TeachingFocusItem { id:string; icon:string; title:string; subtitle:str
 interface TeachingAchievementItem { id:string; icon:string; title:string; subtitle:string; highlight:string }
 interface TeacherTag { id:string; name:string; enabled:boolean; source:string; sort:number; updatedAt:string }
 interface TeacherTagDraft { id:string; name:string; enabled:boolean; sort:number }
-interface TeacherTypeItem { id:string; name:string; sort:number; enabled:boolean }
-interface TeacherTypeDraft { id:string; name:string; sort:number; enabled:boolean }
+interface TeacherTypeItem { id:string; name:string; sort:number; weight:number; enabled:boolean }
+interface TeacherTypeDraft { id:string; name:string; sort:number; weight:number; enabled:boolean }
 interface ContentTemplateSettings { intros:IntroTemplate[]; focusItems:TeachingFocusItem[]; achievements:TeachingAchievementItem[] }
 interface StoredContentTemplateSettings extends Partial<ContentTemplateSettings> { focusTags?:string[] }
 function cloneTeacher(teacher: Teacher): Teacher { return { ...teacher, subjects: [...teacher.subjects], grades: [...teacher.grades], tags: [...teacher.tags] } }
@@ -285,12 +285,12 @@ async function deleteTeacherTag(tag: TeacherTag): Promise<void> {
 }
 const teacherTypeStorageKey = 'youzuobiao.teacher-types'
 const defaultTeacherTypes: TeacherTypeItem[] = [
-  { id:'type-good', name:'好老师', sort:100, enabled:true },
-  { id:'type-excellent', name:'优秀教师', sort:90, enabled:true },
-  { id:'type-math', name:'数学专家', sort:80, enabled:true },
-  { id:'type-english', name:'英语专家', sort:70, enabled:false },
-  { id:'type-core', name:'骨干教员', sort:60, enabled:true },
-  { id:'type-professional', name:'专业教员', sort:50, enabled:true }
+  { id:'type-good', name:'好老师', sort:100, weight:90, enabled:true },
+  { id:'type-excellent', name:'优秀教师', sort:90, weight:80, enabled:true },
+  { id:'type-math', name:'数学专家', sort:80, weight:60, enabled:true },
+  { id:'type-english', name:'英语专家', sort:70, weight:60, enabled:false },
+  { id:'type-core', name:'骨干教员', sort:60, weight:50, enabled:true },
+  { id:'type-professional', name:'专业教员', sort:50, weight:40, enabled:true }
 ]
 function loadTeacherTypes(): TeacherTypeItem[] {
   const raw = window.localStorage.getItem(teacherTypeStorageKey)
@@ -303,7 +303,8 @@ function loadTeacherTypes(): TeacherTypeItem[] {
       const candidate = item as Partial<TeacherTypeItem> & { parentType?: unknown }
       const name = typeof candidate.name === 'string' ? candidate.name : typeof candidate.parentType === 'string' ? candidate.parentType : ''
       if (!name || typeof candidate.id !== 'string' || typeof candidate.sort !== 'number' || typeof candidate.enabled !== 'boolean') return []
-      return [{ id:candidate.id, name, sort:candidate.sort, enabled:candidate.enabled }]
+      const weight = typeof candidate.weight === 'number' ? candidate.weight : 100
+      return [{ id:candidate.id, name, sort:candidate.sort, weight, enabled:candidate.enabled }]
     })
     return types.length ? types : defaultTeacherTypes.map(item => ({ ...item }))
   } catch {
@@ -320,7 +321,7 @@ const teacherTypePageSize = ref(10)
 const newTeacherTypeRowId = '__new-teacher-type__'
 const editingTeacherTypeId = ref<string | null>(null)
 const teacherTypeSaving = ref(false)
-const teacherTypeDraft = reactive<TeacherTypeDraft>({ id:'', name:'', sort:100, enabled:true })
+const teacherTypeDraft = reactive<TeacherTypeDraft>({ id:'', name:'', sort:100, weight:100, enabled:true })
 const filteredTeacherTypes = computed(() => [...teacherTypes.value]
   .sort((a, b) => b.sort - a.sort || a.name.localeCompare(b.name, 'zh-CN')))
 const teacherTypePageRows = computed(() => {
@@ -328,7 +329,7 @@ const teacherTypePageRows = computed(() => {
   return filteredTeacherTypes.value.slice(start, start + teacherTypePageSize.value)
 })
 const teacherTypeTableRows = computed<TeacherTypeItem[]>(() => editingTeacherTypeId.value === newTeacherTypeRowId
-  ? [...teacherTypePageRows.value, { id:newTeacherTypeRowId, name:'', sort:100, enabled:true }]
+  ? [...teacherTypePageRows.value, { id:newTeacherTypeRowId, name:'', sort:100, weight:100, enabled:true }]
   : teacherTypePageRows.value)
 function persistTeacherTypes(): void { window.localStorage.setItem(teacherTypeStorageKey, JSON.stringify(teacherTypes.value)) }
 function teacherTypeIndex(index: number): number { return (teacherTypePage.value - 1) * teacherTypePageSize.value + index + 1 }
@@ -341,17 +342,17 @@ function ensureTeacherTypeEditorAvailable(): boolean {
 }
 function startTeacherTypeEdit(item: TeacherTypeItem): void {
   if (!ensureTeacherTypeEditorAvailable()) return
-  Object.assign(teacherTypeDraft, { id:item.id, name:item.name, sort:item.sort, enabled:item.enabled })
+  Object.assign(teacherTypeDraft, { id:item.id, name:item.name, sort:item.sort, weight:item.weight, enabled:item.enabled })
   editingTeacherTypeId.value = item.id
 }
 function startNewTeacherType(): void {
   if (!ensureTeacherTypeEditorAvailable()) return
-  Object.assign(teacherTypeDraft, { id:'', name:'', sort:100, enabled:true })
+  Object.assign(teacherTypeDraft, { id:'', name:'', sort:100, weight:100, enabled:true })
   editingTeacherTypeId.value = newTeacherTypeRowId
 }
 function cancelTeacherTypeEdit(): void {
   editingTeacherTypeId.value = null
-  Object.assign(teacherTypeDraft, { id:'', name:'', sort:100, enabled:true })
+  Object.assign(teacherTypeDraft, { id:'', name:'', sort:100, weight:100, enabled:true })
 }
 function teacherTypeRowClassName({ row }: { row: TeacherTypeItem }): string {
   return editingTeacherTypeId.value === row.id ? 'template-editing-row' : ''
@@ -362,6 +363,7 @@ async function saveTeacherType(): Promise<void> {
   if (!name) { ElMessage.warning('请输入教师类型'); return }
   if (name.length < 2 || name.length > 20) { ElMessage.warning('教师类型长度为 2 至 20 个字符'); return }
   if (!Number.isInteger(teacherTypeDraft.sort) || teacherTypeDraft.sort < 0 || teacherTypeDraft.sort > 999) { ElMessage.warning('排序必须为 0 至 999 的整数'); return }
+  if (!Number.isInteger(teacherTypeDraft.weight) || teacherTypeDraft.weight < 0 || teacherTypeDraft.weight > 999) { ElMessage.warning('排序权重必须为 0 至 999 的整数'); return }
   if (teacherTypes.value.some(item => item.name === name && item.id !== teacherTypeDraft.id)) {
     ElMessage.warning('相同教师类型已存在')
     return
@@ -373,14 +375,14 @@ async function saveTeacherType(): Promise<void> {
     const index = teacherTypes.value.findIndex(item => item.id === teacherTypeDraft.id)
     if (index >= 0) {
       const previousName = teacherTypes.value[index].name
-      teacherTypes.value[index] = { id:teacherTypeDraft.id, name, sort:teacherTypeDraft.sort, enabled:teacherTypeDraft.enabled }
+      teacherTypes.value[index] = { id:teacherTypeDraft.id, name, sort:teacherTypeDraft.sort, weight:teacherTypeDraft.weight, enabled:teacherTypeDraft.enabled }
       if (previousName !== name) {
         rows.value.forEach(teacher => { if (teacher.type === previousName) teacher.type = name })
         if (current.value.type === previousName) current.value.type = name
       }
     }
   } else {
-    teacherTypes.value.push({ id:`type-${Date.now()}`, name, sort:teacherTypeDraft.sort, enabled:teacherTypeDraft.enabled })
+    teacherTypes.value.push({ id:`type-${Date.now()}`, name, sort:teacherTypeDraft.sort, weight:teacherTypeDraft.weight, enabled:teacherTypeDraft.enabled })
   }
   persistTeacherTypes()
   teacherTypeSaving.value = false
@@ -748,7 +750,8 @@ async function submitAudit():Promise<void>{if(isPortraitGenerating.value&&auditD
             <el-table :data="teacherTypeTableRows" border stripe row-key="id" empty-text="暂无教师类型" :row-class-name="teacherTypeRowClassName">
               <el-table-column type="index" :index="teacherTypeIndex" label="序号" width="70" align="center"/>
               <el-table-column label="教师类型" min-width="180" show-overflow-tooltip><template #default="{row}"><el-input v-if="editingTeacherTypeId === row.id" v-model="teacherTypeDraft.name" maxlength="20" show-word-limit placeholder="请输入教师类型名称"/><span v-else>{{ row.name }}</span></template></el-table-column>
-              <el-table-column label="排序" width="150" align="center" sortable><template #default="{row}"><el-input-number v-if="editingTeacherTypeId === row.id" v-model="teacherTypeDraft.sort" class="inline-config-number" :min="0" :max="999" :step="1" controls-position="right"/><span v-else>{{ row.sort }}</span></template></el-table-column>
+              <el-table-column label="排序" width="130" align="center" sortable><template #default="{row}"><el-input-number v-if="editingTeacherTypeId === row.id" v-model="teacherTypeDraft.sort" class="inline-config-number" :min="0" :max="999" :step="1" controls-position="right"/><span v-else>{{ row.sort }}</span></template></el-table-column>
+              <el-table-column label="排序权重" width="150" align="center"><template #default="{row}"><el-input-number v-if="editingTeacherTypeId === row.id" v-model="teacherTypeDraft.weight" class="inline-config-number" :min="0" :max="999" :step="1" controls-position="right"/><span v-else>{{ row.weight }}</span></template></el-table-column>
               <el-table-column label="状态" width="100"><template #default="{row}"><el-switch v-if="editingTeacherTypeId === row.id" v-model="teacherTypeDraft.enabled" inline-prompt active-text="启用" inactive-text="停用"/><el-switch v-else v-model="row.enabled" inline-prompt active-text="启用" inactive-text="停用" :disabled="editingTeacherTypeId !== null" @change="updateTeacherTypeStatus(row)"/></template></el-table-column>
               <el-table-column label="操作" width="140" fixed="right"><template #default="{row}"><template v-if="editingTeacherTypeId === row.id"><el-button link @click="cancelTeacherTypeEdit">取消</el-button><el-button link type="primary" :loading="teacherTypeSaving" @click="saveTeacherType">保存</el-button></template><template v-else><el-button link type="primary" :disabled="editingTeacherTypeId !== null" @click="startTeacherTypeEdit(row)">编辑</el-button><el-button link type="danger" :disabled="editingTeacherTypeId !== null" @click="deleteTeacherType(row)">删除</el-button></template></template></el-table-column>
             </el-table>
