@@ -210,6 +210,9 @@ const teacherTagPageRows = computed(() => {
 const teacherTagTableRows = computed<TeacherTag[]>(() => editingTeacherTagId.value === newTeacherTagRowId
   ? [...teacherTagPageRows.value, { id:newTeacherTagRowId, name:'', enabled:true, source:'超级主管/admin', sort:100, updatedAt:'-' }]
   : teacherTagPageRows.value)
+function teacherTagRelationCount(name: string): number {
+  return rows.value.filter(teacher => teacher.tags.includes(name)).length
+}
 function persistTeacherTags(): void { window.localStorage.setItem(teacherTagStorageKey, JSON.stringify(teacherTags.value)) }
 function teacherTagIndex(index: number): number { return (teacherTagPage.value - 1) * teacherTagPageSize.value + index + 1 }
 function currentDateTime(): string {
@@ -331,6 +334,9 @@ const teacherTypePageRows = computed(() => {
 const teacherTypeTableRows = computed<TeacherTypeItem[]>(() => editingTeacherTypeId.value === newTeacherTypeRowId
   ? [...teacherTypePageRows.value, { id:newTeacherTypeRowId, name:'', sort:100, weight:100, enabled:true }]
   : teacherTypePageRows.value)
+function teacherTypeRelationCount(name: string): number {
+  return rows.value.filter(teacher => teacher.type === name).length
+}
 function persistTeacherTypes(): void { window.localStorage.setItem(teacherTypeStorageKey, JSON.stringify(teacherTypes.value)) }
 function teacherTypeIndex(index: number): number { return (teacherTypePage.value - 1) * teacherTypePageSize.value + index + 1 }
 function ensureTeacherTypeEditorAvailable(): boolean {
@@ -752,6 +758,7 @@ async function submitAudit():Promise<void>{if(isPortraitGenerating.value&&auditD
               <el-table-column label="教师类型" min-width="180" show-overflow-tooltip><template #default="{row}"><el-input v-if="editingTeacherTypeId === row.id" v-model="teacherTypeDraft.name" maxlength="20" show-word-limit placeholder="请输入教师类型名称"/><span v-else>{{ row.name }}</span></template></el-table-column>
               <el-table-column label="排序" width="130" align="center" sortable><template #default="{row}"><el-input-number v-if="editingTeacherTypeId === row.id" v-model="teacherTypeDraft.sort" class="inline-config-number" :min="0" :max="999" :step="1" controls-position="right"/><span v-else>{{ row.sort }}</span></template></el-table-column>
               <el-table-column label="排序权重" width="150" align="center"><template #default="{row}"><el-input-number v-if="editingTeacherTypeId === row.id" v-model="teacherTypeDraft.weight" class="inline-config-number" :min="0" :max="999" :step="1" controls-position="right"/><span v-else>{{ row.weight }}</span></template></el-table-column>
+              <el-table-column label="关联教师数" width="120" align="center"><template #default="{row}"><span v-if="editingTeacherTypeId !== row.id">{{ teacherTypeRelationCount(row.name) }}</span></template></el-table-column>
               <el-table-column label="状态" width="100"><template #default="{row}"><el-switch v-if="editingTeacherTypeId === row.id" v-model="teacherTypeDraft.enabled" inline-prompt active-text="启用" inactive-text="停用"/><el-switch v-else v-model="row.enabled" inline-prompt active-text="启用" inactive-text="停用" :disabled="editingTeacherTypeId !== null" @change="updateTeacherTypeStatus(row)"/></template></el-table-column>
               <el-table-column label="操作" width="140" fixed="right"><template #default="{row}"><template v-if="editingTeacherTypeId === row.id"><el-button link @click="cancelTeacherTypeEdit">取消</el-button><el-button link type="primary" :loading="teacherTypeSaving" @click="saveTeacherType">保存</el-button></template><template v-else><el-button link type="primary" :disabled="editingTeacherTypeId !== null" @click="startTeacherTypeEdit(row)">编辑</el-button><el-button link type="danger" :disabled="editingTeacherTypeId !== null" @click="deleteTeacherType(row)">删除</el-button></template></template></el-table-column>
             </el-table>
@@ -766,6 +773,7 @@ async function submitAudit():Promise<void>{if(isPortraitGenerating.value&&auditD
               <el-table-column label="标签名称" min-width="180" show-overflow-tooltip><template #default="{row}"><el-input v-if="editingTeacherTagId === row.id" v-model="teacherTagDraft.name" maxlength="6" show-word-limit placeholder="请输入标签名称"/><el-tag v-else effect="plain" disable-transitions>{{ row.name }}</el-tag></template></el-table-column>
               <el-table-column label="状态" width="100"><template #default="{row}"><el-switch v-if="editingTeacherTagId === row.id" v-model="teacherTagDraft.enabled" inline-prompt active-text="启用" inactive-text="停用"/><el-switch v-else v-model="row.enabled" inline-prompt active-text="启用" inactive-text="停用" :disabled="editingTeacherTagId !== null" @change="updateTeacherTagStatus(row)"/></template></el-table-column>
               <el-table-column label="排序" width="150" align="center" sortable><template #default="{row}"><el-input-number v-if="editingTeacherTagId === row.id" v-model="teacherTagDraft.sort" class="inline-config-number" :min="0" :max="999" :step="1" controls-position="right"/><span v-else>{{ row.sort }}</span></template></el-table-column>
+              <el-table-column label="关联教师数" width="120" align="center"><template #default="{row}"><span v-if="editingTeacherTagId !== row.id">{{ teacherTagRelationCount(row.name) }}</span></template></el-table-column>
               <el-table-column prop="updatedAt" label="更新时间" width="170"/>
               <el-table-column label="操作" width="140" fixed="right"><template #default="{row}"><template v-if="editingTeacherTagId === row.id"><el-button link @click="cancelTeacherTagEdit">取消</el-button><el-button link type="primary" :loading="teacherTagSaving" @click="saveTeacherTag">保存</el-button></template><template v-else><el-button link type="primary" :disabled="editingTeacherTagId !== null" @click="startTeacherTagEdit(row)">编辑</el-button><el-button link type="danger" :disabled="editingTeacherTagId !== null" @click="deleteTeacherTag(row)">删除</el-button></template></template></el-table-column>
             </el-table>
