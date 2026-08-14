@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>全部教员</title>
+  <style>
+    :root {
+      --blue: #0768f8;
+      --navy: #071a46;
+      --orange: #d98516;
+      --muted: #777;
+      --bg: #f5f5f7;
+      --line: #e6e6e6;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { box-sizing: border-box; }
+    html { background: #eceef1; }
+    body {
+      margin: 0;
+      color: #111;
+      background: #eceef1;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+    button { font: inherit; }
+
+    .app {
+      width: min(100%, 520px);
+      min-height: 100dvh;
+      margin: 0 auto;
+      padding-bottom: calc(82px + var(--safe-bottom));
+      background: var(--bg);
+      box-shadow: 0 0 30px rgba(0, 0, 0, .08);
+      position: relative;
+    }
+
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: #fff;
+    }
+
+    .status-bar {
+      height: 48px;
+      padding: 15px 46px 0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .status-right { display: flex; align-items: center; gap: 8px; }
+    .signal { display: flex; align-items: end; gap: 2px; height: 14px; }
+    .signal i { width: 3px; border-radius: 2px; background: #080808; }
+    .signal i:nth-child(1) { height: 5px; }
+    .signal i:nth-child(2) { height: 8px; }
+    .signal i:nth-child(3) { height: 11px; }
+    .signal i:nth-child(4) { height: 14px; }
+    .wifi { width: 17px; height: 12px; border: 3px solid #090909; border-left-color: transparent; border-right-color: transparent; border-bottom-color: transparent; border-radius: 50% 50% 0 0; position: relative; }
+    .wifi::after { content: ""; position: absolute; left: 5px; top: 4px; width: 4px; height: 4px; border-radius: 50%; background: #090909; }
+    .battery { width: 26px; height: 13px; border: 2px solid #aaa; border-radius: 4px; padding: 2px; position: relative; }
+    .battery::before { content: ""; display: block; height: 100%; border-radius: 1px; background: #090909; }
+    .battery::after { content: ""; position: absolute; right: -4px; top: 3px; width: 2px; height: 5px; border-radius: 0 2px 2px 0; background: #aaa; }
+
+    .title-row {
+      height: 70px;
+      padding: 0 20px;
+      display: grid;
+      grid-template-columns: 92px 1fr 92px;
+      align-items: center;
+    }
+    h1 { margin: 0; text-align: center; font-size: 22px; line-height: 1; font-weight: 800; }
+    .mini-program-menu {
+      width: 96px;
+      height: 36px;
+      justify-self: end;
+      display: grid;
+      grid-template-columns: 1fr 1px 1fr;
+      align-items: center;
+      border: 1px solid #eee9e5;
+      border-radius: 20px;
+      background: #fff;
+      color: #111;
+    }
+    .dots { text-align: center; font-size: 22px; line-height: 0; transform: translateY(-2px); }
+    .menu-divider { width: 1px; height: 19px; background: #eee9e5; }
+    .mini-circle { width: 18px; height: 18px; margin: auto; border: 2px solid #111; border-radius: 50%; position: relative; }
+    .mini-circle::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #111; position: absolute; left: 5px; top: 5px; }
+
+    .filters {
+      padding: 0 18px 10px;
+      display: grid;
+      grid-template-columns: 1.05fr 1.45fr .8fr;
+      gap: 9px;
+      background: #fff;
+    }
+    .filter { position: relative; }
+    .filter-button {
+      width: 100%;
+      height: 42px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 5px;
+      border: 0;
+      border-radius: 12px;
+      background: #f0f0f0;
+      color: #111;
+      font-size: 16px;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .chevron { width: 8px; height: 8px; flex: none; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform .18s ease; }
+    .filter.open .chevron { transform: rotate(225deg) translate(-1px, -1px); }
+    .filter.open .filter-button,
+    .filter.has-value .filter-button {
+      color: var(--blue);
+      background: #edf4ff;
+      box-shadow: inset 0 0 0 2px #4f8df7;
+    }
+    .filter-menu {
+      display: none;
+      position: absolute;
+      top: 48px;
+      left: 0;
+      min-width: 100%;
+      padding: 5px;
+      border: 1px solid #ececec;
+      border-radius: 9px;
+      background: #fff;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .14);
+      z-index: 30;
+    }
+    .filter.open .filter-menu { display: grid; }
+    .filter-menu button { padding: 9px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; font-size: 14px; white-space: nowrap; cursor: pointer; }
+    .filter-menu button:hover, .filter-menu button.active { color: var(--blue); background: #edf5ff; }
+    .combined-menu {
+      position: fixed;
+      top: 160px;
+      left: 50%;
+      width: min(520px, 100vw);
+      min-width: 0;
+      height: min(420px, calc(100dvh - 242px - var(--safe-bottom)));
+      padding: 0;
+      transform: translateX(-50%);
+      grid-template-rows: minmax(0, 1fr) 74px;
+      border: 0;
+      border-top: 1px solid #eee;
+      border-radius: 0;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, .14);
+      overflow: hidden;
+      background: #fff;
+      z-index: 45;
+    }
+    .filter.open .combined-menu { display: grid; }
+    .combined-body { min-height: 0; display: grid; grid-template-columns: 112px minmax(0, 1fr); }
+    .stage-nav { padding: 8px 0; overflow-y: auto; background: #f3f3f3; }
+    .stage-nav button {
+      width: 100%;
+      min-height: 54px;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: #333;
+      text-align: left;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .stage-nav button.active { color: var(--blue); background: #fff; font-weight: 800; }
+    .subject-panel { min-width: 0; padding: 22px 18px; overflow-y: auto; background: #fff; }
+    .subject-panel h3 { margin: 0 0 18px; color: #222; font-size: 18px; font-weight: 800; }
+    .subject-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+    .combined-menu .subject-grid button {
+      min-width: 0;
+      height: 44px;
+      padding: 0 4px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: #f6f6f7;
+      color: #292929;
+      text-align: center;
+      font-size: 13px;
+      white-space: normal;
+      cursor: pointer;
+    }
+    .combined-menu .subject-grid button.active { color: var(--blue); border-color: #8cb7ff; background: #edf4ff; font-weight: 700; }
+    .combined-actions { padding: 12px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border-top: 1px solid #eee; background: #fff; }
+    .combined-actions button { height: 50px; border: 0; border-radius: 8px; background: #f5f5f5; color: #333; font-size: 16px; font-weight: 700; cursor: pointer; }
+    .combined-actions .confirm { background: #3478ef; color: #fff; }
+
+    .teacher-list { padding: 14px; display: grid; gap: 14px; }
+    .teacher-card {
+      padding: 16px 18px 10px;
+      border: 0;
+      border-radius: 17px;
+      background: #fff;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, .10);
+      overflow: hidden;
+      transition: transform .16s ease, box-shadow .16s ease;
+    }
+    .teacher-card:active { transform: scale(.992); box-shadow: 0 1px 5px rgba(0, 0, 0, .08); }
+    .teacher-main { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 16px; }
+    .portrait {
+      width: 130px;
+      height: 168px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 12px;
+      background: #ededed;
+    }
+    .portrait img { width: 100%; height: 100%; display: block; object-fit: cover; image-rendering: auto; }
+    .degree {
+      position: absolute;
+      top: 0;
+      left: 0;
+      min-width: 42px;
+      padding: 6px 9px;
+      border-radius: 0 0 9px 0;
+      background: #f2b35d;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+    }
+    .teacher-copy { min-width: 0; }
+    .name-line { min-height: 31px; display: flex; align-items: center; gap: 10px; }
+    .name { color: var(--navy); font-size: 25px; font-weight: 800; white-space: nowrap; }
+    .role { padding: 4px 10px; border-radius: 7px; background: #ffebce; color: #d4760c; font-size: 13px; font-weight: 700; white-space: nowrap; }
+    .subject { margin-top: 7px; color: var(--blue); font-size: 15px; line-height: 1.35; font-weight: 700; }
+    .credentials { margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; color: #777; font-size: 14px; line-height: 1.5; }
+    .credential { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+    .credential + .credential::before { content: ""; width: 1px; height: 17px; margin: 0 8px 0 3px; background: #e2e2e2; }
+    .credential svg { width: 15px; height: 15px; color: var(--orange); stroke-width: 2.2; }
+    .tags { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 7px; }
+    .tag { padding: 5px 10px; border-radius: 7px; background: #f0f6fd; color: #555; font-size: 13px; font-weight: 700; white-space: nowrap; }
+    .summary { margin: 10px 0 7px; color: #777; font-size: 14px; line-height: 1.48; }
+    .teacher-footer { height: 30px; display: grid; grid-template-columns: .85fr 1.25fr 1fr; align-items: end; border-top: 1px solid var(--line); color: #858585; font-size: 14px; }
+    .stat { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .stat:nth-child(2) { justify-content: center; }
+    .stat:nth-child(3) { justify-content: flex-end; }
+    .stat svg { width: 20px; height: 20px; stroke-width: 2.1; }
+    button.stat { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
+    button.stat.saved { color: #f09a20; }
+    button.stat.saved svg { fill: #f09a20; }
+
+    .bottom-nav {
+      position: fixed;
+      z-index: 25;
+      left: 50%;
+      bottom: 0;
+      width: min(100%, 520px);
+      height: calc(82px + var(--safe-bottom));
+      padding: 10px 26px var(--safe-bottom);
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      align-items: start;
+      border-top: 1px solid #eee;
+      background: rgba(255, 255, 255, .98);
+      backdrop-filter: blur(16px);
+    }
+    .nav-item { min-width: 0; padding: 0; display: grid; justify-items: center; gap: 5px; border: 0; background: transparent; color: #999; font-size: 13px; cursor: pointer; }
+    .nav-item svg { width: 24px; height: 24px; stroke-width: 2.4; }
+    .nav-item.active { color: var(--blue); font-weight: 700; }
+    .nav-item.active svg { fill: rgba(7, 104, 248, .12); }
+
+    .toast {
+      position: fixed;
+      z-index: 60;
+      left: 50%;
+      bottom: calc(95px + var(--safe-bottom));
+      max-width: calc(100% - 48px);
+      padding: 9px 16px;
+      border-radius: 8px;
+      background: rgba(20, 20, 20, .84);
+      color: #fff;
+      font-size: 13px;
+      transform: translate(-50%, 12px);
+      opacity: 0;
+      pointer-events: none;
+      transition: .2s ease;
+    }
+    .toast.show { transform: translate(-50%, 0); opacity: 1; }
+    .empty { display: none; padding: 70px 20px; color: #888; text-align: center; }
+
+    @media (max-width: 410px) {
+      .status-bar { padding-left: 28px; padding-right: 25px; }
+      .filters { padding-left: 10px; padding-right: 10px; gap: 6px; }
+      .filter-button { padding: 0 8px; font-size: 14px; }
+      .combined-menu { width: 100%; }
+      .combined-body { grid-template-columns: 102px minmax(0, 1fr); }
+      .subject-panel { padding: 20px 14px; }
+      .subject-grid { gap: 10px 7px; }
+      .teacher-list { padding: 10px; gap: 11px; }
+      .teacher-card { padding: 12px 12px 9px; }
+      .teacher-main { grid-template-columns: 108px minmax(0, 1fr); gap: 12px; }
+      .portrait { width: 108px; height: 142px; }
+      .name { font-size: 21px; }
+      .role { padding: 3px 7px; font-size: 11px; }
+      .subject { font-size: 14px; }
+      .credentials { margin-top: 10px; font-size: 12px; }
+      .tag { padding: 4px 8px; font-size: 11px; }
+      .summary { font-size: 12px; }
+      .teacher-footer { font-size: 12px; }
+      .stat svg { width: 18px; height: 18px; }
+      .bottom-nav { padding-left: 12px; padding-right: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="status-bar" aria-hidden="true">
+        <span>23:58</span>
+        <span class="status-right"><span class="signal"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="battery"></span></span>
+      </div>
+      <div class="title-row">
+        <span></span>
+        <h1>全部教员</h1>
+        <button class="mini-program-menu" type="button" aria-label="小程序菜单" data-toast="小程序菜单"><span class="dots">•••</span><span class="menu-divider"></span><span class="mini-circle"></span></button>
+      </div>
+      <div class="filters" aria-label="教员筛选">
+        <div class="filter" data-key="type"><button class="filter-button" type="button"><span>教员类型</span><i class="chevron"></i></button><div class="filter-menu"><button class="active" data-value="all">全部类型</button><button data-value="骨干教员">骨干教员</button><button data-value="专业教员">专业教员</button><button data-value="AI英语伴读">AI英语伴读</button></div></div>
+        <div class="filter" data-key="combined">
+          <button class="filter-button" type="button"><span>年级/学科</span><i class="chevron"></i></button>
+          <div class="filter-menu combined-menu" id="combinedFilterMenu">
+            <div class="combined-body">
+              <nav class="stage-nav" id="stageNav" aria-label="选择学段"></nav>
+              <section class="subject-panel">
+                <h3 id="subjectPanelTitle">小学</h3>
+                <div class="subject-grid" id="subjectGrid"></div>
+              </section>
+            </div>
+            <div class="combined-actions"><button type="button" id="resetCombined">重置</button><button class="confirm" type="button" id="confirmCombined">确定</button></div>
+          </div>
+        </div>
+        <div class="filter" data-key="sort"><button class="filter-button" type="button"><span>排序</span><i class="chevron"></i></button><div class="filter-menu"><button class="active" data-value="综合">综合排序</button><button data-value="评分">评分优先</button><button data-value="授课">授课最多</button><button data-value="收藏">收藏最多</button></div></div>
+      </div>
+    </header>
+
+    <main class="teacher-list" id="teacherList">
+      <article class="teacher-card" data-type="骨干教员" data-grade="小学" data-subject="数学" data-rating="4.9" data-hours="1012" data-favorites="343" data-order="1">
+        <div class="teacher-main">
+          <div class="portrait"><img src="./assets/teacher-2.png" alt="袁教员肖像"><span class="degree">硕博</span></div>
+          <div class="teacher-copy">
+            <div class="name-line"><strong class="name">袁教员</strong><span class="role">骨干教员</span></div>
+            <div class="subject">小学数学 / 小学奥数</div>
+            <div class="credentials"><span class="credential"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m3 10 9-5 9 5-9 5-9-5Z"/><path d="M7 12v5c3 2 7 2 10 0v-5"/></svg>清华大学硕士</span><span class="credential"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 22s8-3 8-10V5l-8-3-8 3v7c0 7 8 10 8 10Z"/><path d="m9 12 2 2 4-5"/></svg>8年教学经验</span></div>
+            <div class="tags"><span class="tag">985</span><span class="tag">小升初</span><span class="tag">基础补强</span></div>
+            <p class="summary">兼顾基础补强与竞赛拓展，帮助学生建立完整的数学思维体系。</p>
+          </div>
+        </div>
+        <div class="teacher-footer"><span class="stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 2.7 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.3l6.2-.9L12 2.7Z"/></svg>4.9</span><span class="stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13Z"/><path d="M8 4v13"/></svg>已授课1012小时</span><button class="stat favorite" type="button" aria-label="收藏袁教员"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/></svg><span>343人收藏</span></button></div>
+      </article>
+
+      <article class="teacher-card" data-type="骨干教员" data-grade="高一高二" data-subject="数学" data-rating="4.8" data-hours="894" data-favorites="286" data-order="2">
+        <div class="teacher-main">
+          <div class="portrait"><img src="./assets/teacher-1.png" alt="袁教员肖像"><span class="degree">硕博</span></div>
+          <div class="teacher-copy">
+            <div class="name-line"><strong class="name">袁教员</strong><span class="role">骨干教员</span></div>
+            <div class="subject">高中数学</div>
+            <div class="credentials"><span class="credential"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m3 10 9-5 9 5-9 5-9-5Z"/><path d="M7 12v5c3 2 7 2 10 0v-5"/></svg>北京师范大学</span><span class="credential"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 22s8-3 8-10V5l-8-3-8 3v7c0 7 8 10 8 10Z"/><path d="m9 12 2 2 4-5"/></svg>8年教学经验</span></div>
+            <div class="tags"><span class="tag">211</span><span class="tag">分层教学</span><span class="tag">高考提分</span></div>
+            <p class="summary">兼顾基础补强与竞赛拓展，帮助学生建立完整的数学思维体系。</p>
+          </div>
+        </div>
+        <div class="teacher-footer"><span class="stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 2.7 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.3l6.2-.9L12 2.7Z"/></svg>4.9</span><span class="stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13Z"/><path d="M8 4v13"/></svg>已授课1012小时</span><button class="stat favorite" type="button" aria-label="收藏袁教员"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/></svg><span>343人收藏</span></button></div>
+      </article>
+
+      <article class="teacher-card" data-type="骨干教员" data-grade="高三" data-subject="生物 化学 地理" data-rating="4.7" data-hours="760" data-favorites="198" data-order="3">
+        <div class="teacher-main">
+          <div class="portrait"><img src="./assets/teacher-3.png" alt="袁教员肖像"><span class="degree">硕博</span></div>
+          <div class="teacher-copy">
+            <div class="name-line"><strong class="name">袁教员</strong><span class="role">骨干教员</span></div>
+            <div class="subject">高中生物 / 高中化学 / 高中地理</div>
+            <div class="credentials"><span class="credential"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m3 10 9-5 9 5-9 5-9-5Z"/><path d="M7 12v5c3 2 7 2 10 0v-5"/></svg>本科</span><span class="credential"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 22s8-3 8-10V5l-8-3-8 3v7c0 7 8 10 8 10Z"/><path d="m9 12 2 2 4-5"/></svg>8年教学经验</span></div>
+            <div class="tags"><span class="tag">分层教学</span><span class="tag">高考提分</span></div>
+            <p class="summary">总结历年生物、化学、地理经典考题，总结答题技巧，告别死记硬背</p>
+          </div>
+        </div>
+        <div class="teacher-footer"><span class="stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 2.7 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.3l6.2-.9L12 2.7Z"/></svg>4.9</span><span class="stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13Z"/><path d="M8 4v13"/></svg>已授课1012小时</span><button class="stat favorite" type="button" aria-label="收藏袁教员"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/></svg><span>343人收藏</span></button></div>
+      </article>
+      <div class="empty" id="emptyState">没有找到符合条件的教员</div>
+    </main>
+
+    <nav class="bottom-nav" aria-label="主导航">
+      <button class="nav-item" type="button" data-nav="首页"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10Z"/></svg><span>首页</span></button>
+      <button class="nav-item active" type="button" data-nav="全部教员"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 17h8"/></svg><span>全部教员</span></button>
+      <button class="nav-item" type="button" data-nav="成为会员"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m3 7 4 3 5-7 5 7 4-3-2 13H5L3 7Z"/><circle cx="12" cy="13" r="1"/></svg><span>成为会员</span></button>
+      <button class="nav-item" type="button" data-nav="消息"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z"/><path d="M8 11h.01M12 11h.01M16 11h.01"/></svg><span>消息</span></button>
+      <button class="nav-item" type="button" data-nav="我的"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="7" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>我的</span></button>
+    </nav>
+    <div class="toast" id="toast" role="status"></div>
+  </div>
+
+  <script>
+    const stageSubjects = [
+      { stage: '小学', subjects: ['语文', '数学', '英语'] },
+      { stage: '初一初二', subjects: ['语文', '数学', '英语', '物理', '生物', '道德与法治', '历史', '地理'] },
+      { stage: '初三', subjects: ['语文', '数学', '英语', '物理', '化学', '道德与法治', '历史'] },
+      { stage: '高一高二', subjects: ['语文', '数学', '英语', '物理', '化学', '生物', '思想政治', '历史', '地理'] },
+      { stage: '高三', subjects: ['语文', '数学', '英语', '物理', '化学', '生物', '思想政治', '历史', '地理'] }
+    ];
+    const combinedFilterMenu = document.querySelector('#combinedFilterMenu');
+    const stageNav = document.querySelector('#stageNav');
+    const subjectGrid = document.querySelector('#subjectGrid');
+    const subjectPanelTitle = document.querySelector('#subjectPanelTitle');
+    let activeStage = '小学';
+    let draftCombined = 'all';
+
+    stageNav.innerHTML = stageSubjects.map(group => `<button type="button" data-stage="${group.stage}">${group.stage}</button>`).join('');
+
+    function renderCombinedPanel() {
+      stageNav.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.stage === activeStage));
+      const group = stageSubjects.find(item => item.stage === activeStage);
+      subjectPanelTitle.textContent = activeStage;
+      subjectGrid.innerHTML = group.subjects.map(subject => {
+        const value = `${activeStage}|${subject}`;
+        return `<button type="button" class="${draftCombined === value ? 'active' : ''}" data-combined-value="${value}">${subject}</button>`;
+      }).join('');
+    }
+
+    renderCombinedPanel();
+
+    const extraTeachers = [
+      { name: '张教员', image: 'teacher-1.png', type: '专业教员', degree: '硕士', grade: '初三', subject: '数学', subjectText: '初三数学 / 中考数学', school: '华东师范大学硕士', experience: '7年教学经验', tags: ['中考冲刺', '错题诊断', '耐心细致'], summary: '擅长拆解压轴题和易错点，通过分层训练帮助学生稳步提升。', rating: 4.9, hours: 1286, favorites: 426 },
+      { name: '李教员', image: 'teacher-2.png', type: '专业教员', degree: '博士', grade: '高一高二', subject: '物理', subjectText: '高中物理 / 强基物理', school: '中国科学技术大学博士', experience: '6年教学经验', tags: ['强基计划', '竞赛入门', '模型思维'], summary: '注重物理模型建立与实验分析，帮助学生打通知识模块。', rating: 4.8, hours: 680, favorites: 312 },
+      { name: '周教员', image: 'teacher-3.png', type: '专业教员', degree: '硕士', grade: '小学', subject: '语文', subjectText: '小学语文 / 阅读写作', school: '南京师范大学硕士', experience: '9年教学经验', tags: ['阅读理解', '写作提升', '大语文'], summary: '从阅读兴趣出发，系统训练概括、赏析和写作表达能力。', rating: 4.9, hours: 1560, favorites: 518 },
+      { name: '陈教员', image: 'teacher-1.png', type: '骨干教员', degree: '硕博', grade: '初三', subject: '英语', subjectText: '初三英语 / 中考英语', school: '北京外国语大学硕士', experience: '10年教学经验', tags: ['语法体系', '阅读完形', '口语表达'], summary: '围绕词汇、语法与阅读构建闭环，提升综合语言运用能力。', rating: 5.0, hours: 1832, favorites: 602 },
+      { name: '王教员', image: 'teacher-2.png', type: '专业教员', degree: '博士', grade: '高三', subject: '化学', subjectText: '高三化学 / 化学竞赛', school: '浙江大学博士', experience: '5年教学经验', tags: ['竞赛培优', '实验探究', '强基冲刺'], summary: '用结构化方法梳理反应原理，强化实验题与计算题能力。', rating: 4.7, hours: 540, favorites: 241 },
+      { name: '赵教员', image: 'teacher-3.png', type: '专业教员', degree: '硕士', grade: '初一初二', subject: '语文', subjectText: '初中语文 / 阅读写作', school: '陕西师范大学硕士', experience: '8年教学经验', tags: ['作文批改', '古诗文', '答题规范'], summary: '总结阅读答题框架与作文升格方法，课堂反馈具体可执行。', rating: 4.8, hours: 978, favorites: 337 },
+      { name: '刘教员', image: 'teacher-1.png', type: 'AI英语伴读', degree: '硕博', grade: '小学', subject: '英语', subjectText: '小学英语 / 自然拼读', school: '上海外国语大学硕士', experience: '11年教学经验', tags: ['自然拼读', '绘本阅读', '兴趣启蒙'], summary: '通过情境和绘本积累词汇，让孩子敢开口、会表达。', rating: 4.9, hours: 1415, favorites: 489 },
+      { name: '孙教员', image: 'teacher-2.png', type: '专业教员', degree: '本科', grade: '初一初二', subject: '物理 数学', subjectText: '初中物理 / 初中数学', school: '华中师范大学本科', experience: '6年教学经验', tags: ['基础补强', '实验专题', '同步提升'], summary: '重视概念理解和计算规范，适合基础薄弱学生同步巩固。', rating: 4.6, hours: 721, favorites: 176 },
+      { name: '何教员', image: 'teacher-3.png', type: '专业教员', degree: '博士', grade: '高三', subject: '生物', subjectText: '高三生物 / 生物竞赛', school: '复旦大学博士', experience: '4年教学经验', tags: ['遗传专题', '实验设计', '竞赛思维'], summary: '擅长遗传推理和实验设计，用图表归纳复杂生命过程。', rating: 4.8, hours: 488, favorites: 229 }
+    ];
+
+    const list = document.querySelector('#teacherList');
+    const baseCards = [...document.querySelectorAll('.teacher-card')];
+    const emptyState = document.querySelector('#emptyState');
+    extraTeachers.forEach((teacher, index) => {
+      const card = baseCards[index % baseCards.length].cloneNode(true);
+      Object.assign(card.dataset, { type: teacher.type, grade: teacher.grade, subject: teacher.subject, rating: teacher.rating, hours: teacher.hours, favorites: teacher.favorites, order: index + 4 });
+      const image = card.querySelector('.portrait img');
+      image.src = `./assets/${teacher.image}`;
+      image.alt = `${teacher.name}肖像`;
+      card.querySelector('.degree').textContent = teacher.degree;
+      card.querySelector('.name').textContent = teacher.name;
+      card.querySelector('.role').textContent = teacher.type;
+      card.querySelector('.subject').textContent = teacher.subjectText;
+      const credentials = card.querySelectorAll('.credential');
+      credentials[0].lastChild.textContent = teacher.school;
+      credentials[1].lastChild.textContent = teacher.experience;
+      card.querySelector('.tags').innerHTML = teacher.tags.map(tag => `<span class="tag">${tag}</span>`).join('');
+      card.querySelector('.summary').textContent = teacher.summary;
+      const stats = card.querySelectorAll('.stat');
+      stats[0].lastChild.textContent = String(teacher.rating);
+      stats[1].lastChild.textContent = `已授课${teacher.hours}小时`;
+      stats[2].querySelector('span').textContent = `${teacher.favorites}人收藏`;
+      stats[2].setAttribute('aria-label', `收藏${teacher.name}`);
+      list.insertBefore(card, emptyState);
+    });
+
+    const state = { type: 'all', combined: 'all', sort: '综合' };
+    const filters = [...document.querySelectorAll('.filter')];
+    const cards = [...document.querySelectorAll('.teacher-card')];
+    const toast = document.querySelector('#toast');
+    let toastTimer;
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 1600);
+    }
+
+    function render() {
+      let visible = cards.filter(card => {
+        const typeMatch = state.type === 'all' || card.dataset.type === state.type;
+        const [selectedGrade, selectedSubject] = state.combined === 'all' ? ['', ''] : state.combined.split('|');
+        const combinedMatch = state.combined === 'all' || (card.dataset.grade === selectedGrade && card.dataset.subject.split(' ').includes(selectedSubject));
+        const matches = typeMatch && combinedMatch;
+        card.hidden = !matches;
+        return matches;
+      });
+      if (state.sort === '综合') visible.sort((a, b) => Number(a.dataset.order) - Number(b.dataset.order));
+      if (state.sort === '评分') visible.sort((a, b) => Number(b.dataset.rating) - Number(a.dataset.rating) || Number(b.dataset.hours) - Number(a.dataset.hours));
+      if (state.sort === '授课') visible.sort((a, b) => Number(b.dataset.hours) - Number(a.dataset.hours));
+      if (state.sort === '收藏') visible.sort((a, b) => Number(b.dataset.favorites) - Number(a.dataset.favorites));
+      visible.forEach(card => list.insertBefore(card, emptyState));
+      emptyState.style.display = visible.length ? 'none' : 'block';
+    }
+
+    filters.forEach(filter => {
+      const trigger = filter.querySelector('.filter-button');
+      const label = trigger.querySelector('span');
+      trigger.addEventListener('click', event => {
+        event.stopPropagation();
+        const willOpen = !filter.classList.contains('open');
+        filters.forEach(item => item !== filter && item.classList.remove('open'));
+        filter.classList.toggle('open');
+        if (filter.dataset.key === 'combined' && willOpen) {
+          draftCombined = state.combined;
+          activeStage = draftCombined === 'all' ? '小学' : draftCombined.split('|')[0];
+          renderCombinedPanel();
+        }
+      });
+      if (filter.dataset.key === 'combined') return;
+      filter.querySelectorAll('.filter-menu button').forEach(option => option.addEventListener('click', () => {
+        filter.querySelectorAll('.filter-menu button').forEach(item => item.classList.remove('active'));
+        option.classList.add('active');
+        state[filter.dataset.key] = option.dataset.value;
+        const defaultLabels = { type: '教员类型', combined: '年级/学科' };
+        label.textContent = option.dataset.value === 'all' ? defaultLabels[filter.dataset.key] : (option.dataset.label || option.dataset.value);
+        if (filter.dataset.key === 'sort') label.textContent = option.dataset.value;
+        const isDefault = (filter.dataset.key === 'type' && option.dataset.value === 'all') || (filter.dataset.key === 'sort' && option.dataset.value === '综合');
+        filter.classList.toggle('has-value', !isDefault);
+        filter.classList.remove('open');
+        render();
+      }));
+    });
+
+    combinedFilterMenu.addEventListener('click', event => event.stopPropagation());
+    stageNav.addEventListener('click', event => {
+      const button = event.target.closest('[data-stage]');
+      if (!button) return;
+      activeStage = button.dataset.stage;
+      renderCombinedPanel();
+    });
+    subjectGrid.addEventListener('click', event => {
+      const button = event.target.closest('[data-combined-value]');
+      if (!button) return;
+      draftCombined = button.dataset.combinedValue;
+      renderCombinedPanel();
+    });
+    document.querySelector('#resetCombined').addEventListener('click', () => {
+      draftCombined = 'all';
+      activeStage = '小学';
+      renderCombinedPanel();
+    });
+    document.querySelector('#confirmCombined').addEventListener('click', () => {
+      state.combined = draftCombined;
+      document.querySelector('[data-key="combined"] .filter-button span').textContent = draftCombined === 'all' ? '年级/学科' : draftCombined.replace('|', '-');
+      document.querySelector('[data-key="combined"]').classList.toggle('has-value', draftCombined !== 'all');
+      document.querySelector('[data-key="combined"]').classList.remove('open');
+      render();
+    });
+
+    document.addEventListener('click', () => filters.forEach(filter => filter.classList.remove('open')));
+    document.querySelectorAll('.favorite').forEach(button => button.addEventListener('click', event => {
+      event.stopPropagation();
+      button.classList.toggle('saved');
+      const count = button.querySelector('span');
+      const card = button.closest('.teacher-card');
+      const baseCount = Number(card.dataset.favorites);
+      count.textContent = `${baseCount + (button.classList.contains('saved') ? 1 : 0)}人收藏`;
+      showToast(button.classList.contains('saved') ? '已收藏该教员' : '已取消收藏');
+    }));
+    cards.forEach(card => card.addEventListener('click', () => showToast('教员详情页入口')));
+    document.querySelectorAll('[data-nav]').forEach(button => button.addEventListener('click', () => {
+      if (button.dataset.nav === '全部教员') return;
+      showToast(`${button.dataset.nav}页面入口`);
+    }));
+    document.querySelector('[data-toast]').addEventListener('click', event => showToast(event.currentTarget.dataset.toast));
+  </script>
+</body>
+</html>
